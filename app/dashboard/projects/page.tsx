@@ -1,37 +1,18 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { useState } from "react";
-
-import ProjectsHeader from "@/components/projects/ProjectsHeader";
-import ProjectSearch from "@/components/projects/ProjectSearch";
-import ProjectFilters from "@/components/projects/ProjectFilters";
-import ProjectGrid from "@/components/projects/ProjectGrid";
-import NewProjectModal from "@/components/projects/NewProjectModal";
+// ============================================================
+// ACADIA — "MES PROJETS" RETIRÉ (passe UX)
+//
+// Cette page reposait sur ProjectContext (contexts/ProjectContext.tsx),
+// un état React en mémoire uniquement — aucune persistance serveur,
+// aucune sauvegarde dans PostgreSQL. Un utilisateur y créant un
+// "projet" le perdait intégralement au rechargement de la page, alors
+// que la sidebar/le dashboard le présentaient comme une destination
+// principale au même titre que "Mes recherches" (contexts/ResearchContext.tsx,
+// réellement persisté). Plutôt que de maintenir deux systèmes parallèles
+// dont un trompeur, ce lien redirige vers le système réel.
+// ============================================================
 
 export default function ProjectsPage() {
-  const [open, setOpen] = useState(false);
-
-  const [filter, setFilter] = useState("Tous");
-
-  return (
-    <div className="space-y-8">
-      <ProjectsHeader
-        onNewProject={() => setOpen(true)}
-      />
-
-      <ProjectSearch />
-
-      <ProjectFilters
-        value={filter}
-        onChange={setFilter}
-      />
-
-      <ProjectGrid />
-
-      <NewProjectModal
-        open={open}
-        onClose={() => setOpen(false)}
-      />
-    </div>
-  );
+  redirect("/dashboard/research");
 }

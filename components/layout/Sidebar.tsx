@@ -5,7 +5,6 @@ import { usePathname, useRouter } from "next/navigation";
 
 import {
   LayoutDashboard,
-  FolderKanban,
   FileSearch,
   Settings,
   LogOut,
@@ -19,7 +18,6 @@ import { useAuth } from "@/contexts/AuthContext";
 const menuItems = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { title: "Mes recherches", href: "/dashboard/research", icon: FileSearch },
-  { title: "Mes projets", href: "/dashboard/projects", icon: FolderKanban },
   { title: "Paramètres", href: "/dashboard/settings", icon: Settings },
 ];
 

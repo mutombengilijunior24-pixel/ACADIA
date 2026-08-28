@@ -368,6 +368,10 @@ function persistToStorage(key: string, value: unknown) {
 
 type ResearchContextType = {
 
+  // Statut réel de la dernière tentative d'écriture PostgreSQL
+  // (write-through) — "saved" uniquement après confirmation HTTP.
+  saveStatus: "idle" | "saving" | "saved" | "error";
+
   // ----------------------------------------------------------
   // PROJETS ENREGISTRÉS
   // ----------------------------------------------------------
@@ -727,6 +731,10 @@ export function ResearchProvider({
     setIsHydrated,
   ] = useState(false);
 
+  // Statut réel de la dernière écriture PostgreSQL (write-through,
+  // voir plus bas) — jamais "saved" sans confirmation HTTP effective.
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
   useEffect(() => {
     if (isAuthLoading) return;
 
@@ -870,14 +878,19 @@ export function ResearchProvider({
 
     if (researchStateSyncTimeout.current) clearTimeout(researchStateSyncTimeout.current);
     researchStateSyncTimeout.current = setTimeout(() => {
+      setSaveStatus("saving");
       fetch("/api/research-state", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ researches, projects, instruments, datasets, annotations, bibliography, exportHistory, theoreticalFramework }),
-      }).catch(() => {
-        // Écriture simultanée best-effort : une panne réseau laisse
-        // le cache local intact, jamais une erreur visible.
-      });
+      })
+        .then((res) => setSaveStatus(res.ok ? "saved" : "error"))
+        .catch(() => {
+          // Écriture simultanée best-effort : une panne réseau laisse
+          // le cache local intact, mais l'indicateur doit refléter
+          // honnêtement l'échec plutôt que de rester silencieux.
+          setSaveStatus("error");
+        });
     }, 1500);
 
     return () => {
@@ -2333,6 +2346,8 @@ export function ResearchProvider({
   return (
     <ResearchContext.Provider
       value={{
+
+        saveStatus,
 
         // ----------------------------------------------------
         // Projets

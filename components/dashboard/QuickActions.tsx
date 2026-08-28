@@ -4,7 +4,6 @@ import Link from "next/link";
 import {
   FilePlus2,
   FolderKanban,
-  FolderOpen,
   Settings,
   ArrowRight,
 } from "lucide-react";
@@ -25,13 +24,6 @@ const actions = [
     color: "from-violet-500 to-indigo-600",
   },
   {
-    title: "Mes projets",
-    description: "Vue d'ensemble de vos projets",
-    href: "/dashboard/projects",
-    icon: FolderOpen,
-    color: "from-emerald-500 to-green-600",
-  },
-  {
     title: "Paramètres du compte",
     description: "Gérer votre profil et votre mot de passe",
     href: "/dashboard/settings",
@@ -48,7 +40,7 @@ export default function QuickActions() {
         <p className="mt-2 text-slate-500">Accédez instantanément aux fonctionnalités principales d&apos;ACADIA.</p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
         {actions.map((action) => {
           const Icon = action.icon;
           return (

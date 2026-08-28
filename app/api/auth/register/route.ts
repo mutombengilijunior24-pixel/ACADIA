@@ -71,31 +71,47 @@ export async function POST(request: Request) {
   const passwordHash = await hashPassword(password);
   const profile = body.profile ?? {};
 
-  const user = await createUser({
-    email,
-    passwordHash,
-    firstName,
-    lastName: body.lastName,
-    domain: body.domain,
-    role,
-    studentProfile:
-      role === "student"
-        ? { studyLevel: profile.studyLevel, institution: profile.institution, faculty: profile.faculty, department: profile.department }
-        : undefined,
-    supervisorProfile:
-      role === "supervisor"
-        ? {
-            academicTitle: profile.academicTitle,
-            institution: profile.institution,
-            faculty: profile.faculty,
-            department: profile.department,
-            domain: profile.domain,
-            specialties: profile.specialties,
-            activeAcademicYear: profile.academicYear,
-            professionalEmail: email,
-          }
-        : undefined,
-  });
+  let user;
+  try {
+    user = await createUser({
+      email,
+      passwordHash,
+      firstName,
+      lastName: body.lastName,
+      domain: body.domain,
+      role,
+      studentProfile:
+        role === "student"
+          ? { studyLevel: profile.studyLevel, institution: profile.institution, faculty: profile.faculty, department: profile.department }
+          : undefined,
+      supervisorProfile:
+        role === "supervisor"
+          ? {
+              academicTitle: profile.academicTitle,
+              institution: profile.institution,
+              faculty: profile.faculty,
+              department: profile.department,
+              domain: profile.domain,
+              specialties: profile.specialties,
+              activeAcademicYear: profile.academicYear,
+              professionalEmail: email,
+            }
+          : undefined,
+    });
+  } catch (error) {
+    // La vérification ci-dessus (findUserByEmail) n'est pas atomique avec
+    // cette création : deux inscriptions simultanées avec le même email
+    // (double clic, deux onglets) peuvent toutes deux la franchir avant
+    // qu'aucune n'ait encore été committée. La contrainte unique
+    // PostgreSQL (User.email) reste la vraie garantie — on la traduit ici
+    // en réponse propre plutôt que de laisser un 500 non géré remonter.
+    const isUniqueEmailConflict =
+      typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "P2002";
+    if (isUniqueEmailConflict) {
+      return Response.json({ error: "Un compte existe déjà avec cette adresse email." }, { status: 409 });
+    }
+    throw error;
+  }
 
   await logAudit({ actorId: user.id, action: "USER_CREATED", entityType: "User", entityId: user.id, metadata: { role } });
 

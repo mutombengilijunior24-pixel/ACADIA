@@ -56,28 +56,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const login = useCallback(async (email: string, password: string) => {
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    const data = await res.json();
-    if (!res.ok) return { ok: false as const, error: data.error ?? "Connexion impossible." };
-    setUser(data.user);
-    return { ok: true as const };
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      let data: { user?: PublicUser; error?: string } = {};
+      try {
+        data = await res.json();
+      } catch {
+        return { ok: false as const, error: "Réponse du serveur invalide. Réessayez." };
+      }
+      if (!res.ok) return { ok: false as const, error: data.error ?? "Connexion impossible." };
+      setUser(data.user ?? null);
+      return { ok: true as const };
+    } catch {
+      return { ok: false as const, error: "Impossible de contacter le serveur. Vérifiez votre connexion et réessayez." };
+    }
   }, []);
 
   const register = useCallback(
-    async (input: { email: string; password: string; firstName: string; lastName?: string; domain?: string }) => {
-      const res = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(input),
-      });
-      const data = await res.json();
-      if (!res.ok) return { ok: false as const, error: data.error ?? "Inscription impossible." };
-      setUser(data.user);
-      return { ok: true as const };
+    async (input: {
+      email: string;
+      password: string;
+      firstName: string;
+      lastName?: string;
+      domain?: string;
+      role?: "student" | "supervisor";
+      profile?: Record<string, string | undefined>;
+    }) => {
+      try {
+        const res = await fetch("/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        });
+        let data: { user?: PublicUser; error?: string } = {};
+        try {
+          data = await res.json();
+        } catch {
+          return { ok: false as const, error: "Réponse du serveur invalide. Réessayez." };
+        }
+        if (!res.ok) return { ok: false as const, error: data.error ?? "Inscription impossible." };
+        setUser(data.user ?? null);
+        return { ok: true as const };
+      } catch {
+        return { ok: false as const, error: "Impossible de contacter le serveur. Vérifiez votre connexion et réessayez." };
+      }
     },
     []
   );

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { GraduationCap, Presentation, UserPlus, ArrowLeft } from "lucide-react";
+import { GraduationCap, Presentation, UserPlus, ArrowLeft, Eye, EyeOff } from "lucide-react";
 import AuthShell from "@/components/auth/AuthShell";
 import { useAuth } from "@/contexts/AuthContext";
 import ResearchPrimaryButton from "@/components/research/ResearchWizard/brand/ResearchPrimaryButton";
@@ -21,6 +21,38 @@ type Step = "choice" | "student" | "supervisor";
 
 const STUDY_LEVELS = ["Licence", "Master", "Autre"];
 
+// ACADIA cible actuellement exclusivement la Faculté des Sciences
+// Économiques et de Gestion — ce n'est donc plus demandé à
+// l'inscription (retiré du parcours utilisateur), mais la valeur
+// reste renseignée automatiquement pour ne rien casser côté export/
+// canevas qui utilisent encore ce champ (StudentProfile.faculty /
+// SupervisorProfile.faculty, colonnes Prisma non supprimées).
+const DEFAULT_FACULTY = "Sciences Économiques et de Gestion";
+
+// Liste validée des institutions partenaires ACADIA. Le nom complet
+// n'est affiché ("ACRONYME — NOM COMPLET") que lorsqu'il est déjà
+// documenté ailleurs dans ACADIA (components/research/ResearchWizard/
+// StepUniversity.tsx pour UNILU/UNIKIN/UPC) — jamais inventé pour les
+// autres institutions, conformément à la consigne.
+const INSTITUTIONS: { acronym: string; fullName?: string }[] = [
+  { acronym: "UNILU", fullName: "Université de Lubumbashi" },
+  { acronym: "UNH", fullName: "Université Nouveaux Horizons" },
+  { acronym: "ECOPO", fullName: "École Supérieure de la Gouvernance Économique et Politique de Lubumbashi" },
+  { acronym: "UNIKIN", fullName: "Université de Kinshasa" },
+  { acronym: "UNIKIS" },
+  { acronym: "UPN" },
+  { acronym: "UNIGOM" },
+  { acronym: "UOM" },
+  { acronym: "UNIKOL" },
+  { acronym: "UNIKAM" },
+  { acronym: "UPC", fullName: "Université Protestante au Congo" },
+  { acronym: "UPL" },
+];
+
+function institutionLabel(i: { acronym: string; fullName?: string }): string {
+  return i.fullName ? `${i.acronym} — ${i.fullName}` : i.acronym;
+}
+
 export default function RegisterPage() {
   const router = useRouter();
   const { register } = useAuth();
@@ -33,8 +65,9 @@ export default function RegisterPage() {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [institution, setInstitution] = useState("");
-  const [faculty, setFaculty] = useState("");
+  const [institutionOther, setInstitutionOther] = useState("");
   const [department, setDepartment] = useState("");
 
   // Étudiant
@@ -51,18 +84,22 @@ export default function RegisterPage() {
     setError(null);
     setSubmitting(true);
 
+    const resolvedInstitution = institution === "Autre" ? institutionOther.trim() : institution;
     const profile =
       role === "student"
-        ? { institution, faculty, department, studyLevel }
-        : { institution, faculty, department, academicTitle, domain, specialties, academicYear };
+        ? { institution: resolvedInstitution, faculty: DEFAULT_FACULTY, department, studyLevel }
+        : { institution: resolvedInstitution, faculty: DEFAULT_FACULTY, department, academicTitle, domain, specialties, academicYear };
 
-    const result = await register({ email, password, firstName, lastName: lastName || undefined, role, profile });
-    setSubmitting(false);
-    if (!result.ok) {
-      setError(result.error);
-      return;
+    try {
+      const result = await register({ email, password, firstName, lastName: lastName || undefined, role, profile });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.push(role === "supervisor" ? "/dashboard/supervisor?onboarding=1" : "/dashboard?onboarding=1");
+    } finally {
+      setSubmitting(false);
     }
-    router.push(role === "supervisor" ? "/dashboard/supervisor?onboarding=1" : "/dashboard?onboarding=1");
   }
 
   if (step === "choice") {
@@ -154,19 +191,58 @@ export default function RegisterPage() {
 
         <label className="block text-sm font-semibold text-slate-600">
           Mot de passe
-          <input type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" className="mt-1.5 w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-normal text-acadia-navy focus:border-acadia-blue focus:outline-none" placeholder="8 caractères minimum" />
+          <div className="relative mt-1.5">
+            <input
+              type={showPassword ? "text" : "password"}
+              required
+              minLength={8}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
+              className="w-full rounded-xl border border-slate-200 px-4 py-2.5 pr-11 text-sm font-normal text-acadia-navy focus:border-acadia-blue focus:outline-none"
+              placeholder="8 caractères minimum"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+              className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-400 hover:text-acadia-blue"
+            >
+              {showPassword ? <EyeOff className="h-4.5 w-4.5" /> : <Eye className="h-4.5 w-4.5" />}
+            </button>
+          </div>
         </label>
 
-        <div className="grid grid-cols-2 gap-3">
+        <label className="block text-sm font-semibold text-slate-600">
+          Institution
+          <select
+            value={institution}
+            onChange={(e) => setInstitution(e.target.value)}
+            required
+            className="mt-1.5 w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-normal text-acadia-navy focus:border-acadia-blue focus:outline-none"
+          >
+            <option value="" disabled>
+              Sélectionnez votre institution
+            </option>
+            {INSTITUTIONS.map((i) => (
+              <option key={i.acronym} value={i.acronym}>{institutionLabel(i)}</option>
+            ))}
+            <option value="Autre">Autre</option>
+          </select>
+        </label>
+
+        {institution === "Autre" && (
           <label className="block text-sm font-semibold text-slate-600">
-            Institution
-            <input value={institution} onChange={(e) => setInstitution(e.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-normal text-acadia-navy focus:border-acadia-blue focus:outline-none" placeholder="Université de Lubumbashi" />
+            Nom de votre institution
+            <input
+              value={institutionOther}
+              onChange={(e) => setInstitutionOther(e.target.value)}
+              required
+              className="mt-1.5 w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-normal text-acadia-navy focus:border-acadia-blue focus:outline-none"
+              placeholder="Nom complet de l'institution"
+            />
           </label>
-          <label className="block text-sm font-semibold text-slate-600">
-            Faculté
-            <input value={faculty} onChange={(e) => setFaculty(e.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-normal text-acadia-navy focus:border-acadia-blue focus:outline-none" placeholder="Sciences Économiques et de Gestion" />
-          </label>
-        </div>
+        )}
 
         <label className="block text-sm font-semibold text-slate-600">
           Département

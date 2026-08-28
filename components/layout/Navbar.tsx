@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Bell, ChevronDown, Menu, Search, UserCircle2, LogOut, Settings } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import SaveIndicator from "@/components/dashboard/SaveIndicator";
 
 export default function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const { user, logout } = useAuth();
@@ -40,6 +41,8 @@ export default function Navbar({ onMenuClick }: { onMenuClick?: () => void }) {
         </div>
 
         <div className="flex items-center gap-3 lg:gap-5">
+          <SaveIndicator />
+
           <button type="button" className="relative flex h-11 w-11 items-center justify-center rounded-xl transition hover:bg-slate-100">
             <Bell size={21} />
             <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-red-500" />
