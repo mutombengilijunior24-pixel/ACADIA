@@ -1,0 +1,87 @@
+@import "tailwindcss";
+
+/* ============================================================
+   ACADIA — DESIGN TOKENS
+   Source de vérité : public/logos/Logo technologique Acadia (1).png
+   Bleu électrique (compas, dégradé haut du A) + Bleu nuit
+   (wordmark, dégradé bas du A) + Blanc + Gris neutres.
+   Exposés via @theme pour générer des utilitaires Tailwind
+   (bg-acadia-blue, text-acadia-navy, border-acadia-blue, ...).
+============================================================ */
+@theme {
+  --color-acadia-blue: #2554eb;
+  --color-acadia-blue-light: #5b82ff;
+  --color-acadia-blue-dark: #173fc2;
+  --color-acadia-blue-50: #eef2ff;
+  --color-acadia-blue-100: #e0e7ff;
+
+  --color-acadia-navy: #0b1b3a;
+  --color-acadia-navy-soft: #13284d;
+  --color-acadia-navy-50: #eef1f7;
+}
+
+:root {
+  /* Couleurs de base */
+  --background: #f6f8fc;
+  --foreground: #0b1b3a;
+
+  --primary: #2554eb;
+  --primary-light: #eef2ff;
+  --secondary: #0b1b3a;
+
+  --success: #16a34a;
+  --warning: #d97706;
+  --danger: #dc2626;
+
+  /* Identité ACADIA */
+  --acadia-blue: #2554eb;
+  --acadia-blue-light: #5b82ff;
+  --acadia-blue-dark: #173fc2;
+  --acadia-navy: #0b1b3a;
+  --acadia-navy-soft: #13284d;
+
+  /* Sidebar */
+  --sidebar-width: 256px;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* P13 — plusieurs cartes premium utilisent des halos décoratifs
+     positionnés en absolute légèrement hors de leur conteneur
+     (ex. DashboardHeader, AssistantWidget) : un effet volontaire,
+     jamais un contenu réel. Sans cette règle, ce débordement
+     purement visuel permettait un défilement horizontal parasite
+     sur mobile. */
+  overflow-x: hidden;
+}
+
+/* Scrollbar subtile */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Focus ring global */
+:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+  border-radius: 4px;
+}

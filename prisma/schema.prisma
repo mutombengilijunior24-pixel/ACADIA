@@ -1,0 +1,343 @@
+// ============================================================
+// ACADIA — SCHÉMA DE BASE DE DONNÉES (P17)
+//
+// SQLite en développement (base réelle, transactionnelle, fichier
+// local — aucun serveur externe requis, voir
+// ACADIA_P17_PRODUCTION_ARCHITECTURE.md). PostgreSQL documenté
+// comme cible de production : changer `provider` + `DATABASE_URL`
+// suffit, ce schéma reste valide (SQLite ne supportant pas les
+// enums natifs Prisma, tous les champs de statut/rôle/type sont
+// des String — validés côté application par les types TS
+// existants, ex. UserRole, SubmissionStatus).
+//
+// Modèle hybride assumé : colonnes relationnelles pour tout ce qui
+// doit être filtré/contraint/mis en relation, colonnes JSON pour
+// les structures scientifiques imbriquées déjà stables (jamais
+// recalculées par la base — les moteurs déterministes P1-P16
+// restent la seule source de calcul).
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+// ------------------------------------------------------------
+// AUTHENTIFICATION / COMPTE
+// ------------------------------------------------------------
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  role         String    @default("student") // UserRole: student | supervisor | admin
+  status       String    @default("active") // active | disabled
+  firstName    String
+  lastName     String?
+  domain       String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  lastLoginAt  DateTime?
+
+  studentProfile   StudentProfile?
+  supervisorProfile SupervisorProfile?
+  resetTokens      PasswordResetToken[]
+  researchProjects ResearchProject[]        @relation("ResearchOwner")
+
+  canevasList          SupervisionCanevas[]     @relation("CanevasSupervisor")
+  invitationsSent      SupervisorInvitation[]   @relation("InvitationSupervisor")
+  assignmentsAsStudent SupervisionAssignment[]  @relation("AssignmentStudent")
+  assignmentsAsSupervisor SupervisionAssignment[] @relation("AssignmentSupervisor")
+  submissionsAsStudent    Submission[]          @relation("SubmissionStudent")
+  submissionsAsSupervisor Submission[]          @relation("SubmissionSupervisor")
+  messagesSent         InboxMessage[]           @relation("MessageSender")
+  messagesReceived     InboxMessage[]           @relation("MessageRecipient")
+  feedbackGiven        FeedbackEntry[]          @relation("FeedbackSupervisor")
+  notifications        Notification[]           @relation("NotificationUser")
+
+  @@index([role])
+}
+
+model StudentProfile {
+  userId      String  @id
+  studyLevel  String?
+  program     String?
+  institution String?
+  faculty     String?
+  department  String?
+  city        String?
+  country     String?
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model SupervisorProfile {
+  userId              String   @id
+  fullName            String
+  academicTitle       String?
+  institution         String?
+  faculty             String?
+  department          String?
+  domain              String?
+  specialties         String? // liste séparée par virgules — pas de tableau natif SQLite
+  activeAcademicYear  String?
+  isActive            Boolean  @default(true)
+  professionalEmail   String?
+  signature           String?
+  activeCanevasId     String?
+  verificationStatus  String   @default("pending") // pending | verified | rejected
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PasswordResetToken {
+  token     String    @id
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ------------------------------------------------------------
+// RECHERCHE SCIENTIFIQUE
+//
+// Une ligne par recherche. `researchData` = snapshot plat du
+// Wizard (type Research/ResearchData, types/Research.ts).
+// `payload` = structure scientifique complète (type
+// ResearchProject, lib/core/research/ResearchTypes.ts — moteur
+// protégé, jamais modifié). Les sous-collections qui étaient
+// indexées par id de recherche en localStorage (instrument,
+// dataset, bibliographie, annotations, cadre théorique, historique
+// d'export) deviennent des colonnes JSON de CETTE même ligne,
+// puisqu'elles partageaient déjà cette clé.
+// ------------------------------------------------------------
+
+model ResearchProject {
+  id                   String   @id
+  ownerId              String
+  title                String
+  researchType         String?
+  level                String?
+  status               String   @default("draft")
+  domain               String?
+  university           String?
+  location             String?
+  description          String?
+  researchData         String   // JSON (Research/ResearchData)
+  payload              String   // JSON (ResearchProject scientifique complet)
+  instrument           String?  // JSON (InstrumentRecord)
+  dataset              String?  // JSON (Dataset)
+  annotations          String?  // JSON (Record<blockId, AnnotationRecord>)
+  bibliography         String?  // JSON (BibliographyReference[])
+  theoreticalFramework String?  // JSON (TheoreticalFrameworkEntry[])
+  exportHistory        String?  // JSON (ExportHistoryEntry[])
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  owner User @relation("ResearchOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+}
+
+// ------------------------------------------------------------
+// SUPERVISION (migration des stores JSON fichier P16)
+// ------------------------------------------------------------
+
+model SupervisionCanevas {
+  id               String   @id @default(cuid())
+  supervisorId     String
+  academicYear     String
+  faculty          String?
+  department       String?
+  workTypes        String   // JSON string[]
+  steps            String   // JSON CanevasStep[]
+  hypothesisRules  String?  // JSON HypothesisCountRule[]
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  supervisor User @relation("CanevasSupervisor", fields: [supervisorId], references: [id], onDelete: Cascade)
+
+  @@index([supervisorId])
+}
+
+model SupervisorInvitation {
+  id            String    @id @default(cuid())
+  code          String    @unique
+  supervisorId  String
+  studentEmail  String?
+  researchId    String?
+  status        String    @default("pending") // pending | accepted | expired | revoked
+  createdAt     DateTime  @default(now())
+  expiresAt     DateTime
+  usedAt        DateTime?
+  studentId     String?
+
+  supervisor User @relation("InvitationSupervisor", fields: [supervisorId], references: [id], onDelete: Cascade)
+
+  @@index([supervisorId])
+}
+
+model SupervisionAssignment {
+  id           String    @id @default(cuid())
+  studentId    String
+  supervisorId String
+  researchId   String?
+  status       String    @default("active") // active | ended
+  createdAt    DateTime  @default(now())
+  endedAt      DateTime?
+
+  student    User @relation("AssignmentStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  supervisor User @relation("AssignmentSupervisor", fields: [supervisorId], references: [id], onDelete: Cascade)
+
+  // Pas de contrainte d'unicité sur (studentId, supervisorId, status) :
+  // plusieurs affectations "ended" historiques entre la même paire
+  // doivent rester possibles (fin puis nouvelle invitation plus
+  // tard). L'absence de doublon "active" est garantie par
+  // l'application (AssignmentStore.createAssignment vérifie avant
+  // insertion) — cohérent avec Partie 33 du sprint P17 ("les
+  // contraintes de base sont une seconde couche de sécurité, la
+  // validation applicative reste nécessaire").
+  @@index([supervisorId])
+  @@index([studentId])
+}
+
+model Submission {
+  id                   String    @id @default(cuid())
+  researchId           String
+  studentId            String
+  supervisorId         String
+  version              Int
+  snapshot             String    // JSON SubmissionSnapshot (project + instrument + theoreticalFramework)
+  submittedAt          DateTime  @default(now())
+  status               String    @default("submitted")
+  studentMessage       String?
+  reviewedAt           DateTime?
+  reviewedBy           String?
+  feedbackId           String?
+  previousSubmissionId String?
+
+  student    User @relation("SubmissionStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  supervisor User @relation("SubmissionSupervisor", fields: [supervisorId], references: [id], onDelete: Cascade)
+
+  @@unique([researchId, studentId, version])
+  @@index([studentId])
+  @@index([supervisorId])
+  @@index([researchId])
+}
+
+model InboxMessage {
+  id           String    @id @default(cuid())
+  senderId     String
+  recipientId  String
+  researchId   String?
+  submissionId String?
+  subject      String
+  body         String
+  type         String    // feedback | correction | notification | validation | system
+  createdAt    DateTime  @default(now())
+  readAt       DateTime?
+  priority     String    @default("normal")
+
+  sender    User @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient User @relation("MessageRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId])
+}
+
+model FeedbackEntry {
+  id                String   @id @default(cuid())
+  submissionId      String
+  supervisorId      String
+  globalEvaluation  String
+  sections          String   // JSON FeedbackSectionEntry[]
+  createdAt         DateTime @default(now())
+  sentAt            DateTime?
+
+  supervisor User @relation("FeedbackSupervisor", fields: [supervisorId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
+}
+
+model Correction {
+  id           String    @id @default(cuid())
+  submissionId String
+  section      String
+  description  String
+  severity     String
+  status       String    @default("open")
+  createdAt    DateTime  @default(now())
+  resolvedAt   DateTime?
+  resolvedBy   String?
+  discussion   String    @default("[]") // JSON CorrectionDiscussionEntry[]
+
+  @@index([submissionId])
+}
+
+model SupervisorBrief {
+  id                String   @id @default(cuid())
+  submissionId      String
+  generatedAt       DateTime @default(now())
+  generatedBy       String   @default("acadia")
+  status            String   @default("generated")
+  overallState      String
+  strengths         String   // JSON string[]
+  inconsistencies   String   // JSON string[]
+  incompleteSections String  // JSON string[]
+  importantQuestions String  // JSON string[]
+  progressPercent   Int
+  disclaimer        String
+
+  @@index([submissionId])
+}
+
+model Notification {
+  id                  String    @id @default(cuid())
+  userId              String
+  type                String
+  title               String
+  body                String
+  relatedResearchId   String?
+  relatedSubmissionId String?
+  createdAt           DateTime  @default(now())
+  readAt              DateTime?
+
+  user User @relation("NotificationUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model EmailLog {
+  id        String   @id @default(cuid())
+  to        String
+  subject   String
+  template  String
+  status    String
+  createdAt DateTime @default(now())
+  error     String?
+}
+
+// ------------------------------------------------------------
+// AUDIT (Partie 31 du sprint)
+// ------------------------------------------------------------
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String?
+  timestamp  DateTime @default(now())
+  metadata   String? // JSON — jamais de mot de passe/clé/document sensible
+
+  @@index([actorId])
+  @@index([action])
+}
