@@ -66,6 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         data = await res.json();
       } catch {
+        console.error(`[auth/login] Réponse non-JSON du serveur (status ${res.status})`);
         return { ok: false as const, error: "Réponse du serveur invalide. Réessayez." };
       }
       if (!res.ok) return { ok: false as const, error: data.error ?? "Connexion impossible." };
@@ -96,6 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           data = await res.json();
         } catch {
+          console.error(`[auth/register] Réponse non-JSON du serveur (status ${res.status})`);
           return { ok: false as const, error: "Réponse du serveur invalide. Réessayez." };
         }
         if (!res.ok) return { ok: false as const, error: data.error ?? "Inscription impossible." };
