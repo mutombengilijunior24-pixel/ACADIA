@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   FileSearch,
+  ClipboardList,
   Settings,
   LogOut,
   UserCircle2,
@@ -18,6 +19,7 @@ import { useAuth } from "@/contexts/AuthContext";
 const menuItems = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { title: "Mes recherches", href: "/dashboard/research", icon: FileSearch },
+  { title: "Survey", href: "/dashboard/survey", icon: ClipboardList },
   { title: "Paramètres", href: "/dashboard/settings", icon: Settings },
 ];
 

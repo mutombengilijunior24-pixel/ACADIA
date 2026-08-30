@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import Logo from "@/components/shared/Logo";
+import { useAuth } from "@/contexts/AuthContext";
 
 const NAV_LINKS = [
   { href: "#workflow", label: "Fonctionnement" },
@@ -14,6 +15,10 @@ const NAV_LINKS = [
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { user } = useAuth();
+  // Déjà connecté : "Enquêtes" ouvre directement le tableau de bord
+  // Survey plutôt que la page publique de présentation.
+  const surveyHref = user ? "/dashboard/survey" : "/survey";
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/90 backdrop-blur-lg">
@@ -32,6 +37,9 @@ export default function Navbar() {
               {link.label}
             </a>
           ))}
+          <Link href={surveyHref} className="font-medium text-slate-600 transition hover:text-acadia-blue">
+            Enquêtes
+          </Link>
         </nav>
 
         <div className="flex items-center gap-3">
@@ -72,6 +80,13 @@ export default function Navbar() {
                 {link.label}
               </a>
             ))}
+            <Link
+              href={surveyHref}
+              onClick={() => setMobileOpen(false)}
+              className="rounded-lg px-3 py-2.5 font-medium text-slate-600 transition hover:bg-slate-50 hover:text-acadia-blue"
+            >
+              Enquêtes
+            </Link>
           </nav>
           <div className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3">
             <Link href="/login" className="rounded-xl border border-slate-200 px-4 py-2.5 text-center font-semibold text-slate-700">

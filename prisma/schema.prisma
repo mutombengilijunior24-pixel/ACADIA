@@ -59,6 +59,9 @@ model User {
   feedbackGiven        FeedbackEntry[]          @relation("FeedbackSupervisor")
   notifications        Notification[]           @relation("NotificationUser")
 
+  // Module Survey (additif, indépendant de Research) — voir plus bas.
+  surveysOwned         Survey[]                 @relation("SurveyOwner")
+
   @@index([role])
 }
 
@@ -340,4 +343,195 @@ model AuditLog {
 
   @@index([actorId])
   @@index([action])
+}
+
+// ============================================================
+// MODULE SURVEY — moteur d'enquêtes institutionnelles
+//
+// Module additif, indépendant du système Research existant (aucune
+// table ci-dessus modifiée au-delà de l'ajout non destructif de la
+// relation User.surveysOwned). Générique : aucune institution n'est
+// codée en dur — UNILU reste une donnée de démonstration comme une
+// autre, jamais une valeur spéciale dans le schéma ou le code.
+// ============================================================
+
+model Survey {
+  id              String    @id @default(cuid())
+  ownerId         String
+  title           String
+  description     String?
+  objective       String?
+  problem         String?
+  targetAudience  String?
+  institution     String?
+  institutionLogoDocumentId String?
+  status          String    @default("draft") // draft | active | suspended | closed
+  isAnonymous     Boolean   @default(false)
+  targetResponses Int?
+  startDate       DateTime?
+  endDate         DateTime?
+  publicId        String?   @unique
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  owner      User               @relation("SurveyOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  questions  SurveyQuestion[]
+  categories SurveyCategory[]
+  targets    SurveyTarget[]
+  collectors SurveyCollector[]
+  links      SurveyLink[]
+  responses  SurveyResponse[]
+  events     SurveyEvent[]
+
+  @@index([ownerId])
+  @@index([status])
+  @@index([institution])
+  @@index([createdAt])
+}
+
+model SurveyCategory {
+  id       String @id @default(cuid())
+  surveyId String
+  label    String
+  order    Int    @default(0)
+
+  survey    Survey           @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  targets   SurveyTarget[]
+  responses SurveyResponse[]
+
+  @@index([surveyId])
+}
+
+model SurveyQuestion {
+  id                    String   @id @default(cuid())
+  surveyId              String
+  section               String?
+  order                 Int      @default(0)
+  type                  String   // short_text|long_text|single_choice|multiple_choice|scale|boolean|number|age|date|institution|faculty|level|category
+  text                  String
+  required              Boolean  @default(true)
+  variable              String?  // variable méthodologique mesurée par cette question (moteur IA Survey)
+  indicator             String?  // indicateur concret rattaché à la variable (moteur IA Survey)
+  visibleForCategoryIds String?  // JSON string[] — vide/absent = visible pour toutes les catégories
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  survey  Survey           @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  options SurveyOption[]
+  answers SurveyAnswer[]
+
+  @@index([surveyId])
+}
+
+model SurveyOption {
+  id         String @id @default(cuid())
+  questionId String
+  label      String
+  value      String
+  order      Int    @default(0)
+
+  question SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answers  SurveyAnswer[]
+
+  @@index([questionId])
+}
+
+model SurveyTarget {
+  id          String   @id @default(cuid())
+  surveyId    String
+  categoryId  String?
+  label       String
+  targetCount Int?
+  createdAt   DateTime @default(now())
+
+  survey   Survey          @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  category SurveyCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([surveyId])
+}
+
+model SurveyCollector {
+  id        String   @id @default(cuid())
+  surveyId  String
+  label     String
+  channel   String? // link | qr | whatsapp | email
+  createdAt DateTime @default(now())
+
+  survey Survey       @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  links  SurveyLink[]
+
+  @@index([surveyId])
+}
+
+model SurveyLink {
+  id          String    @id @default(cuid())
+  surveyId    String
+  publicId    String    @unique
+  collectorId String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime?
+
+  survey    Survey           @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  collector SurveyCollector? @relation(fields: [collectorId], references: [id], onDelete: SetNull)
+
+  @@index([surveyId])
+}
+
+model SurveyResponse {
+  id            String    @id @default(cuid())
+  surveyId      String
+  categoryId    String?
+  respondentKey String?   // empreinte non identifiante (dédoublonnage optionnel), jamais une donnée personnelle
+  status        String    @default("in_progress") // in_progress | completed | abandoned
+  institution   String?
+  faculty       String?
+  level         String?
+  age           Int?
+  sex           String?
+  metadata      String?   // JSON — informations sociodémographiques additionnelles définies par l'enquête
+  startedAt     DateTime  @default(now())
+  completedAt   DateTime?
+
+  survey   Survey          @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  category SurveyCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  answers  SurveyAnswer[]
+
+  @@unique([surveyId, respondentKey]) // idempotence de la soumission (P20.5) — jamais deux réponses pour la même clé de soumission ; NULL autorisé plusieurs fois (Postgres)
+  @@index([surveyId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([institution])
+  @@index([faculty])
+  @@index([startedAt])
+}
+
+model SurveyAnswer {
+  id         String   @id @default(cuid())
+  responseId String
+  questionId String
+  optionId   String?
+  valueText  String?
+  createdAt  DateTime @default(now())
+
+  response SurveyResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  question SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  option   SurveyOption?  @relation(fields: [optionId], references: [id], onDelete: SetNull)
+
+  @@index([responseId])
+  @@index([questionId])
+  @@index([optionId])
+}
+
+model SurveyEvent {
+  id        String   @id @default(cuid())
+  surveyId  String
+  type      String   // created | published | suspended | closed | response_received | exported
+  metadata  String?
+  createdAt DateTime @default(now())
+
+  survey Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  @@index([surveyId])
+  @@index([type])
 }

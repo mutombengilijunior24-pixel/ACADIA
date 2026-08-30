@@ -20,7 +20,11 @@ export type AuditAction =
   | "DOCUMENT_DELETED"
   | "EXPORT_CREATED"
   | "LOGIN_FAILED"
-  | "ACCESS_DENIED";
+  | "ACCESS_DENIED"
+  | "SURVEY_CREATED"
+  | "SURVEY_PUBLISHED"
+  | "SURVEY_STATUS_CHANGED"
+  | "SURVEY_RESPONSE_RECEIVED";
 
 export async function logAudit(input: {
   actorId?: string;
