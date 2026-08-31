@@ -130,7 +130,7 @@ export async function isDocumentUsedAsSurveyLogo(documentId: string): Promise<bo
 }
 
 export async function getSurveyByPublicId(publicId: string): Promise<Survey | null> {
-  const row = await prisma.survey.findUnique({ where: { publicId }, include: surveyInclude });
+  const row = await withTransientRetry(() => prisma.survey.findUnique({ where: { publicId }, include: surveyInclude }));
   return row ? toSurvey(row) : null;
 }
 
@@ -296,7 +296,7 @@ export async function replaceSurveyQuestions(
     if (optionRows.length > 0) {
       await tx.surveyOption.createMany({ data: optionRows });
     }
-  });
+  }, { timeout: 20000 });
 
   const row = await prisma.survey.findUnique({ where: { id: surveyId }, include: surveyInclude });
   return row ? toSurvey(row) : null;
