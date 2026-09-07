@@ -17,6 +17,7 @@
 
 import type { AnalysisPlan } from "@/lib/core/analysis/AnalysisPlanTypes";
 import type { StatisticalAnalysisRun } from "@/lib/core/statistics/StatisticalTypes";
+import type { ScientificInterpretation } from "@/lib/core/analysis/ScientificInterpretationTypes";
 
 
 // ============================================================
@@ -795,6 +796,14 @@ export interface ResearchProject {
   // ----------------------------------------------------------
 
   statisticalRuns?: StatisticalAnalysisRun[];
+
+  // ----------------------------------------------------------
+  // INTERPRÉTATIONS SCIENTIFIQUES (Mission 6) — additif, historique
+  // complet conservé (même discipline que statisticalRuns : jamais
+  // écrasé, chaque génération reste consultable).
+  // ----------------------------------------------------------
+
+  scientificInterpretations?: ScientificInterpretation[];
 
   // ----------------------------------------------------------
   // MÉTADONNÉES
