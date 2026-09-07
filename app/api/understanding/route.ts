@@ -3,10 +3,17 @@ import { NextResponse } from "next/server";
 import {
   understandResearchSubject,
 } from "@/lib/core/research/SubjectUnderstandingEngine";
+import { getSessionUser, unauthorized } from "@/lib/supervision/apiAuth";
+import { sanitizeMessage } from "@/lib/ai/openai/errorClassification";
+
+export const runtime = "nodejs";
 
 export async function POST(
   request: Request
 ) {
+  const user = await getSessionUser();
+  if (!user) return unauthorized();
+
   try {
     const research =
       await request.json();
@@ -38,21 +45,19 @@ export async function POST(
       data: result,
     });
   } catch (error) {
+    const rawMessage = error instanceof Error ? error.message : "Erreur lors de l'analyse du sujet.";
     console.error(
       "ACADIA A1 ERROR:",
-      error
+      sanitizeMessage(rawMessage)
     );
 
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Erreur lors de l'analyse du sujet.",
+        error: "ACADIA n'a pas pu terminer l'analyse. Veuillez réessayer.",
       },
       {
-        status: 500,
+        status: 502,
       }
     );
   }

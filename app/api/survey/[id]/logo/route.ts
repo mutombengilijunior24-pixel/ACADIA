@@ -11,10 +11,10 @@
 import { getSessionUser, unauthorized, forbidden, notFound } from "@/lib/supervision/apiAuth";
 import { getSurveyById, updateSurveyMeta } from "@/lib/server/survey/SurveyStore";
 import { documentStorageProvider } from "@/lib/server/documents/DocumentStorageProvider";
+import { isPng, isJpeg, isWebp } from "@/lib/server/files/detectFileType";
 
 export const runtime = "nodejs";
 
-const ALLOWED_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const MAX_SIZE_BYTES = 2 * 1024 * 1024; // 2 Mo
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -37,15 +37,20 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (!(file instanceof File)) {
     return Response.json({ error: "Aucun fichier reçu." }, { status: 400 });
   }
-  if (!ALLOWED_MIME_TYPES.has(file.type)) {
-    return Response.json({ error: "Format non pris en charge. Utilisez PNG, JPG ou WEBP." }, { status: 400 });
-  }
   if (file.size > MAX_SIZE_BYTES) {
     return Response.json({ error: "Fichier trop volumineux (2 Mo maximum)." }, { status: 400 });
   }
 
   const data = Buffer.from(await file.arrayBuffer());
-  const doc = await documentStorageProvider.upload({ fileName: file.name || "logo", contentType: file.type, data });
+
+  // Le type déclaré par le client (file.type) n'est jamais fiable —
+  // seule la signature réelle des octets du fichier fait foi.
+  const realContentType = isPng(data) ? "image/png" : isJpeg(data) ? "image/jpeg" : isWebp(data) ? "image/webp" : null;
+  if (!realContentType) {
+    return Response.json({ error: "Format non pris en charge. Utilisez PNG, JPG ou WEBP." }, { status: 400 });
+  }
+
+  const doc = await documentStorageProvider.upload({ fileName: file.name || "logo", contentType: realContentType, data });
 
   const previousLogoId = existing.institutionLogoUrl?.split("/").pop();
 

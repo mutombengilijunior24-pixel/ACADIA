@@ -9,6 +9,7 @@
 
 import { findUserByEmail, createPasswordResetToken } from "@/lib/auth/UserStore";
 import { rateLimiter, rateLimitKey } from "@/lib/server/security/RateLimiter";
+import { sendPasswordResetEmail, appUrl } from "@/lib/email/EmailProvider";
 
 export const runtime = "nodejs";
 
@@ -29,10 +30,22 @@ export async function POST(request: Request) {
 
   const user = await findUserByEmail(email);
 
+  // Réponse identique que le compte existe ou non — ne jamais révéler
+  // si une adresse email est enregistrée (voir le même principe déjà
+  // appliqué dans /api/auth/login).
   if (!user) {
-    return Response.json({ resetLink: null }, { status: 200 });
+    return Response.json({ ok: true }, { status: 200 });
   }
 
   const { token } = await createPasswordResetToken(user.id);
-  return Response.json({ resetLink: `/reset-password?token=${token}` }, { status: 200 });
+  const resetLink = `${appUrl()}/reset-password?token=${token}`;
+  await sendPasswordResetEmail(user.email, resetLink);
+
+  // Le lien n'est JAMAIS renvoyé dans la réponse API — ce serait un
+  // contournement complet de l'authentification (n'importe qui
+  // connaissant un email obtiendrait le token de réinitialisation).
+  // Exception strictement limitée au développement local, pour
+  // pouvoir tester le flux sans service email réel configuré.
+  const devOnly = process.env.NODE_ENV !== "production" ? { resetLink } : {};
+  return Response.json({ ok: true, ...devOnly }, { status: 200 });
 }

@@ -13,11 +13,11 @@ import { getSessionUser, unauthorized } from "@/lib/supervision/apiAuth";
 import { extractQuestionnaireFromText } from "@/lib/ai/openai/SurveyDocumentAI";
 import { classifyAIError, sanitizeMessage, AI_USER_FACING_ERROR } from "@/lib/ai/openai/errorClassification";
 import { rateLimiter, rateLimitKey } from "@/lib/server/security/RateLimiter";
+import { isZipArchive } from "@/lib/server/files/detectFileType";
 
 export const runtime = "nodejs";
 
 const MAX_SIZE_BYTES = 8 * 1024 * 1024; // 8 Mo
-const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 export async function POST(request: Request) {
   const user = await getSessionUser();
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
   if (!(file instanceof File)) {
     return Response.json({ error: "Aucun fichier reçu." }, { status: 400 });
   }
-  if (file.type !== DOCX_MIME && !file.name.toLowerCase().endsWith(".docx")) {
+  if (!file.name.toLowerCase().endsWith(".docx")) {
     return Response.json({ error: "Format non pris en charge. Seul le format DOCX est accepté pour le moment." }, { status: 400 });
   }
   if (file.size > MAX_SIZE_BYTES) {
@@ -47,6 +47,12 @@ export async function POST(request: Request) {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
+
+  // Le type déclaré par le client n'est jamais fiable — un .docx est
+  // une archive ZIP : on vérifie la signature réelle des octets.
+  if (!isZipArchive(buffer)) {
+    return Response.json({ error: "Ce fichier n'est pas un document DOCX valide." }, { status: 400 });
+  }
 
   let rawText: string;
   try {

@@ -5,6 +5,10 @@ import type { ResearchData } from "@/types/Research";
 import {
   analyzeResearch,
 } from "@/lib/core/research/ResearchIntelligenceEngine";
+import { getSessionUser, unauthorized } from "@/lib/supervision/apiAuth";
+import { rateLimiter, rateLimitKey } from "@/lib/server/security/RateLimiter";
+
+export const runtime = "nodejs";
 
 
 // ============================================================
@@ -80,6 +84,14 @@ function errorResponse(rawMessage: string, status: number) {
 
 
 export async function POST(request: Request) {
+  const user = await getSessionUser();
+  if (!user) return unauthorized();
+
+  const limit = rateLimiter.check(rateLimitKey("ai-research-intelligence", user.id), 10, 60 * 60 * 1000);
+  if (!limit.allowed) {
+    return errorResponse("Trop de requêtes IA récentes. Réessayez plus tard.", 429);
+  }
+
   let research: ResearchData;
 
   try {

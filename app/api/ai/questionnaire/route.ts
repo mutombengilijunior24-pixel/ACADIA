@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server";
+import { getSessionUser, unauthorized } from "@/lib/supervision/apiAuth";
+import { rateLimiter, rateLimitKey } from "@/lib/server/security/RateLimiter";
+import { classifyAIError, AI_USER_FACING_ERROR } from "@/lib/ai/openai/errorClassification";
+
+export const runtime = "nodejs";
 
 /* =========================================================
    TYPES
@@ -163,6 +168,14 @@ Retourne uniquement le JSON.
 export async function POST(
   request: Request
 ) {
+  const user = await getSessionUser();
+  if (!user) return unauthorized();
+
+  const limit = rateLimiter.check(rateLimitKey("ai-questionnaire", user.id), 10, 60 * 60 * 1000);
+  if (!limit.allowed) {
+    return NextResponse.json({ success: false, error: "Trop de requêtes IA récentes. Réessayez plus tard." }, { status: 429 });
+  }
+
   try {
     const body =
       await request.json();
@@ -212,21 +225,21 @@ export async function POST(
       questionnaire,
     });
   } catch (error) {
+    const rawMessage = error instanceof Error ? error.message : "Une erreur inconnue est survenue.";
+    const classified = classifyAIError(rawMessage);
     console.error(
       "Erreur génération questionnaire :",
-      error
+      classified.message
     );
 
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Une erreur inconnue est survenue.",
+        error: AI_USER_FACING_ERROR,
+        code: classified.code,
       },
       {
-        status: 500,
+        status: 502,
       }
     );
   }

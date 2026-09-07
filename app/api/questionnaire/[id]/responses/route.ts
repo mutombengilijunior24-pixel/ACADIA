@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
+import { z } from "zod";
+import { getSessionUser, unauthorized } from "@/lib/supervision/apiAuth";
+
+export const runtime = "nodejs";
+
+// Système hérité (pré-P17, JSON plat) sans notion de propriétaire par
+// questionnaire — impossible de vérifier "cette personne possède bien
+// CE questionnaire" comme pour le module Survey. Exiger au minimum une
+// session ACADIA valide réduit fortement l'exposition (fini le
+// scraping anonyme par un bot Internet) sans prétendre à une
+// autorisation par propriétaire que ce modèle de données ne permet pas.
+const answersSchema = z.object({ answers: z.record(z.string(), z.unknown()) }).or(z.object({ responses: z.record(z.string(), z.unknown()) }));
 
 /* =========================================================
    TYPES
@@ -78,6 +90,9 @@ export async function GET(
     params: Promise<{ id: string }>;
   }
 ) {
+  const user = await getSessionUser();
+  if (!user) return unauthorized();
+
   try {
     const { id } = await context.params;
 
@@ -137,17 +152,10 @@ export async function POST(
        RÉCUPÉRATION DU CORPS DE LA REQUÊTE
     --------------------------------------------- */
 
-    const body = await request.json();
+    const rawBody = await request.json().catch(() => null);
+    const parsed = answersSchema.safeParse(rawBody);
 
-    const answers =
-      body.answers ??
-      body.responses ??
-      body;
-
-    if (
-      !answers ||
-      typeof answers !== "object"
-    ) {
+    if (!parsed.success) {
       return NextResponse.json(
         {
           success: false,
@@ -186,6 +194,8 @@ export async function POST(
     /* ---------------------------------------------
        NOUVELLE RÉPONSE
     --------------------------------------------- */
+
+    const answers = "answers" in parsed.data ? parsed.data.answers : parsed.data.responses;
 
     const newResponse: StoredResponse = {
       id: `response-${Date.now()}-${Math.random()

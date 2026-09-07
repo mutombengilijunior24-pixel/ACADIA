@@ -9,7 +9,25 @@
 // filtrage explicite dans onRequestError ci-dessous).
 // ============================================================
 
+// Variables sans lesquelles l'application ne peut fonctionner du
+// tout (connexion base de données, signature des sessions) — on
+// échoue immédiatement et clairement au démarrage plutôt que de
+// laisser des erreurs cryptiques apparaître plus tard, requête par
+// requête (voir l'audit sécurité — validation au démarrage).
+const REQUIRED_ENV_VARS = ["DATABASE_URL", "DIRECT_URL", "SESSION_SECRET"] as const;
+
+function assertRequiredEnvVars(): void {
+  const missing = REQUIRED_ENV_VARS.filter((name) => !process.env[name]);
+  if (missing.length > 0) {
+    throw new Error(`Variables d'environnement requises manquantes : ${missing.join(", ")}`);
+  }
+}
+
 export async function register() {
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    assertRequiredEnvVars();
+  }
+
   if (!process.env.SENTRY_DSN) return;
 
   if (process.env.NEXT_RUNTIME === "nodejs") {
