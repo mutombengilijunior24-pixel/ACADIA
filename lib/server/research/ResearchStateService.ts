@@ -11,6 +11,7 @@
 // ============================================================
 
 import { prisma } from "@/lib/server/db/prisma";
+import { logAudit } from "@/lib/server/audit/AuditLog";
 import type { Research } from "@/types/Research";
 import type { ResearchProject as ScientificProject } from "@/lib/core/research/ResearchTypes";
 import type { InstrumentRecord } from "@/contexts/ResearchContext";
@@ -70,6 +71,109 @@ export async function getResearchState(ownerId: string): Promise<ResearchStateBu
 export async function hasAnyResearchState(ownerId: string): Promise<boolean> {
   const count = await prisma.researchProject.count({ where: { ownerId } });
   return count > 0;
+}
+
+// ------------------------------------------------------------
+// ACCÈS PAR PROJET UNIQUE (additif — ne remplace pas
+// getResearchState/syncResearchState, utilisé par les nouvelles
+// routes /api/research/:id pour éviter de resynchroniser
+// l'intégralité de l'état d'un utilisateur quand un seul projet
+// est concerné).
+// ------------------------------------------------------------
+
+export interface SingleResearchProjectRecord {
+  ownerId: string;
+  research: Research | null;
+  project: ScientificProject;
+  instrument: InstrumentRecord | null;
+  dataset: unknown;
+  annotations: Record<string, unknown> | null;
+  bibliography: unknown[];
+  exportHistory: unknown[];
+  theoreticalFramework: TheoreticalFrameworkEntry[];
+}
+
+export async function getResearchProjectRecord(id: string): Promise<SingleResearchProjectRecord | null> {
+  const row = await prisma.researchProject.findUnique({ where: { id } });
+  if (!row) return null;
+
+  const research = safeParse<Research | null>(row.researchData, null);
+
+  return {
+    ownerId: row.ownerId,
+    research: research ? { ...research, createdAt: new Date(research.createdAt), updatedAt: new Date(research.updatedAt) } : null,
+    project: safeParse(row.payload, {} as ScientificProject),
+    instrument: row.instrument ? safeParse(row.instrument, null) : null,
+    dataset: row.dataset ? safeParse(row.dataset, null) : null,
+    annotations: row.annotations ? safeParse(row.annotations, null) : null,
+    bibliography: row.bibliography ? safeParse(row.bibliography, []) : [],
+    exportHistory: row.exportHistory ? safeParse(row.exportHistory, []) : [],
+    theoreticalFramework: row.theoreticalFramework ? safeParse(row.theoreticalFramework, []) : [],
+  };
+}
+
+/**
+ * Met à jour UN projet déjà existant. Ne crée jamais de nouvelle
+ * ligne (la création reste la responsabilité de syncResearchState,
+ * déjà utilisée par le Research Wizard — on évite un second chemin
+ * de création qui pourrait diverger). Retourne null si le projet
+ * n'existe pas ou n'appartient pas à ownerId.
+ */
+export async function updateResearchProjectRecord(
+  ownerId: string,
+  id: string,
+  patch: Partial<{ research: Research; project: ScientificProject }>
+): Promise<SingleResearchProjectRecord | null> {
+  const existing = await prisma.researchProject.findUnique({ where: { id } });
+  if (!existing || existing.ownerId !== ownerId) return null;
+
+  const currentResearch = safeParse<Research | null>(existing.researchData, null);
+  const mergedResearch: Research | null = patch.research ? { ...currentResearch, ...patch.research } : currentResearch;
+  const mergedProject: ScientificProject | undefined = patch.project
+    ? { ...safeParse<ScientificProject>(existing.payload, {} as ScientificProject), ...patch.project }
+    : undefined;
+
+  await prisma.researchProject.update({
+    where: { id },
+    data: {
+      ...(mergedResearch
+        ? {
+            title: mergedResearch.title || "Recherche sans titre",
+            researchType: mergedResearch.researchType,
+            level: mergedResearch.level,
+            status: mergedResearch.status ?? "draft",
+            domain: mergedResearch.domain,
+            university: mergedResearch.university,
+            description: mergedResearch.description,
+            researchData: JSON.stringify(mergedResearch),
+          }
+        : {}),
+      ...(mergedProject ? { payload: JSON.stringify(mergedProject) } : {}),
+    },
+  });
+
+  return getResearchProjectRecord(id);
+}
+
+/**
+ * Archive un projet (status="archived") plutôt qu'une suppression
+ * réelle — cohérent avec la limite déjà assumée par ce service
+ * ("ne supprime jamais une ligne", voir en-tête du fichier) et avec
+ * l'alternative explicitement prévue par ResearchStatus.
+ */
+export async function archiveResearchProjectRecord(ownerId: string, id: string): Promise<boolean> {
+  const existing = await prisma.researchProject.findUnique({ where: { id } });
+  if (!existing || existing.ownerId !== ownerId) return false;
+
+  const currentResearch = safeParse<Research | null>(existing.researchData, null);
+  await prisma.researchProject.update({
+    where: { id },
+    data: {
+      status: "archived",
+      researchData: currentResearch ? JSON.stringify({ ...currentResearch, status: "archived" }) : existing.researchData,
+    },
+  });
+  return true;
 }
 
 /**
@@ -133,6 +237,10 @@ export async function syncResearchState(ownerId: string, bundle: ResearchStateBu
       },
     });
     synced += 1;
+
+    if (!existing) {
+      await logAudit({ actorId: ownerId, action: "RESEARCH_CREATED", entityType: "ResearchProject", entityId: id });
+    }
   }
 
   return { synced };
