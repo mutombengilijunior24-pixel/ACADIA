@@ -14,6 +14,7 @@ import { prisma } from "@/lib/server/db/prisma";
 import { logAudit } from "@/lib/server/audit/AuditLog";
 import type { Research } from "@/types/Research";
 import type { ResearchProject as ScientificProject } from "@/lib/core/research/ResearchTypes";
+import type { Dataset as ScientificDataset } from "@/lib/core/dataset/DatasetTypes";
 import type { InstrumentRecord } from "@/contexts/ResearchContext";
 import type { TheoreticalFrameworkEntry } from "@/lib/core/research/TheoreticalFrameworkTypes";
 
@@ -172,6 +173,23 @@ export async function archiveResearchProjectRecord(ownerId: string, id: string):
       status: "archived",
       researchData: currentResearch ? JSON.stringify({ ...currentResearch, status: "archived" }) : existing.researchData,
     },
+  });
+  return true;
+}
+
+/**
+ * Remplace le Dataset (JSON) d'UN projet — utilisé par le Data
+ * Import Engine (Module 2). N'écrase aucune autre colonne de la
+ * ligne (research/payload/instrument/... inchangés). Retourne
+ * false si le projet n'existe pas ou n'appartient pas à ownerId.
+ */
+export async function setResearchProjectDataset(ownerId: string, id: string, dataset: ScientificDataset): Promise<boolean> {
+  const existing = await prisma.researchProject.findUnique({ where: { id }, select: { ownerId: true } });
+  if (!existing || existing.ownerId !== ownerId) return false;
+
+  await prisma.researchProject.update({
+    where: { id },
+    data: { dataset: JSON.stringify(dataset) },
   });
   return true;
 }
