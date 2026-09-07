@@ -182,6 +182,16 @@ export function buildDatasetFromRows(
         values[col.id] = ["oui", "yes", "true", "vrai", "1"].includes(raw.toLowerCase());
         return;
       }
+      if (col.dataType === "single_choice") {
+        // La valeur stockée doit correspondre exactement à col.options[].value
+        // (lui-même construit en minuscules dans detectColumn ci-dessus) —
+        // sinon deux graphies de la même modalité ("Jamais"/"jamais") sont
+        // comptées comme deux catégories distinctes par les moteurs d'analyse
+        // en aval. Normalisation légitime ici : une modalité à choix unique
+        // est par nature une catégorie fermée, pas un texte libre.
+        values[col.id] = raw.toLowerCase();
+        return;
+      }
       values[col.id] = raw;
     });
 
