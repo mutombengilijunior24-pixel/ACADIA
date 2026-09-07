@@ -16,6 +16,7 @@
 // ============================================================
 
 import type { AnalysisPlan } from "@/lib/core/analysis/AnalysisPlanTypes";
+import type { StatisticalAnalysisRun } from "@/lib/core/statistics/StatisticalTypes";
 
 
 // ============================================================
@@ -787,6 +788,13 @@ export interface ResearchProject {
   // ----------------------------------------------------------
 
   analysisPlan?: AnalysisPlan;
+
+  // ----------------------------------------------------------
+  // EXÉCUTIONS STATISTIQUES (Mission 5) — additif, historique
+  // complet conservé (jamais écrasé — voir mission §21, §30).
+  // ----------------------------------------------------------
+
+  statisticalRuns?: StatisticalAnalysisRun[];
 
   // ----------------------------------------------------------
   // MÉTADONNÉES

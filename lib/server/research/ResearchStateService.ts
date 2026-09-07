@@ -232,6 +232,27 @@ export async function updateAnalysisPlanItemRecord(
 }
 
 /**
+ * Ajoute un run d'exécution statistique (Mission 5) à l'historique
+ * du projet — n'écrase jamais un run précédent (mission §21/§30 :
+ * chaque exécution doit rester consultable, y compris pour comparer
+ * une reproduction ultérieure au run d'origine).
+ */
+export async function appendStatisticalRunRecord(
+  ownerId: string,
+  id: string,
+  run: NonNullable<ScientificProject["statisticalRuns"]>[number]
+): Promise<boolean> {
+  const existing = await prisma.researchProject.findUnique({ where: { id } });
+  if (!existing || existing.ownerId !== ownerId) return false;
+
+  const project = safeParse<ScientificProject>(existing.payload, {} as ScientificProject);
+  project.statisticalRuns = [...(project.statisticalRuns ?? []), run];
+
+  await prisma.researchProject.update({ where: { id }, data: { payload: JSON.stringify(project) } });
+  return true;
+}
+
+/**
  * Archive un projet (status="archived") plutôt qu'une suppression
  * réelle — cohérent avec la limite déjà assumée par ce service
  * ("ne supprime jamais une ligne", voir en-tête du fichier) et avec
