@@ -15,6 +15,8 @@
 // Une structure scientifique = une seule définition.
 // ============================================================
 
+import type { AnalysisPlan } from "@/lib/core/analysis/AnalysisPlanTypes";
+
 
 // ============================================================
 // STATUT D'UNE RECHERCHE
@@ -778,6 +780,13 @@ export interface ResearchProject {
   // ----------------------------------------------------------
 
   instruments: ResearchInstrument[];
+
+  // ----------------------------------------------------------
+  // PLAN D'ANALYSE (Module 4) — additif, absent tant qu'aucun
+  // plan n'a été généré. Voir lib/core/analysis/AnalysisPlanTypes.ts.
+  // ----------------------------------------------------------
+
+  analysisPlan?: AnalysisPlan;
 
   // ----------------------------------------------------------
   // MÉTADONNÉES

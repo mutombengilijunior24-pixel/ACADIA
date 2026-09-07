@@ -185,6 +185,53 @@ export async function updateDatasetColumnMapping(
 }
 
 /**
+ * Enregistre un plan d'analyse (Module 4) généré pour ce projet —
+ * remplace l'éventuel plan précédent (une seule version active à
+ * la fois dans cet incrément ; le versioning complet est hors
+ * scope). Ne touche à aucun autre champ de payload.
+ */
+export async function setAnalysisPlanRecord(ownerId: string, id: string, analysisPlan: NonNullable<ScientificProject["analysisPlan"]>): Promise<boolean> {
+  const existing = await prisma.researchProject.findUnique({ where: { id } });
+  if (!existing || existing.ownerId !== ownerId) return false;
+
+  const project = safeParse<ScientificProject>(existing.payload, {} as ScientificProject);
+  project.analysisPlan = analysisPlan;
+
+  await prisma.researchProject.update({ where: { id }, data: { payload: JSON.stringify(project) } });
+  return true;
+}
+
+/**
+ * Applique une décision du chercheur (accepter/modifier/refuser)
+ * sur UN item du plan d'analyse. Ne touche à aucun autre item.
+ * Retourne null si le projet/plan/item n'existe pas ou n'appartient
+ * pas à ownerId.
+ */
+export async function updateAnalysisPlanItemRecord(
+  ownerId: string,
+  id: string,
+  itemId: string,
+  patch: Partial<Pick<NonNullable<ScientificProject["analysisPlan"]>["items"][number], "status" | "priority" | "userNote">>
+): Promise<NonNullable<ScientificProject["analysisPlan"]> | null> {
+  const existing = await prisma.researchProject.findUnique({ where: { id } });
+  if (!existing || existing.ownerId !== ownerId) return null;
+
+  const project = safeParse<ScientificProject>(existing.payload, {} as ScientificProject);
+  const plan = project.analysisPlan;
+  if (!plan) return null;
+
+  const itemIndex = plan.items.findIndex((i) => i.id === itemId);
+  if (itemIndex === -1) return null;
+
+  plan.items[itemIndex] = { ...plan.items[itemIndex], ...patch };
+  plan.updatedAt = new Date().toISOString();
+  project.analysisPlan = plan;
+
+  await prisma.researchProject.update({ where: { id }, data: { payload: JSON.stringify(project) } });
+  return plan;
+}
+
+/**
  * Archive un projet (status="archived") plutôt qu'une suppression
  * réelle — cohérent avec la limite déjà assumée par ce service
  * ("ne supprime jamais une ligne", voir en-tête du fichier) et avec
