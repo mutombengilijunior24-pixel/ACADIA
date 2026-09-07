@@ -73,7 +73,36 @@ export interface DatasetColumn {
   required: boolean;
 
   options?: { value: string; label: string }[];
+
+  /* --------------------------------------------------------
+     MAPPING SCIENTIFIQUE (Module 3) — additif, jamais lu par
+     DatasetEngine.checkDatasetQuality/computeDatasetReadiness
+     (qui continuent de se fier uniquement à sourceQuestionId/
+     indicatorId ci-dessus). Absent tant qu'aucune correspondance
+     n'a été proposée ou confirmée — jamais une valeur par défaut
+     inventée.
+  -------------------------------------------------------- */
+
+  mappingStatus?: DatasetMappingStatus;
+
+  mappingSource?: DatasetMappingSource;
+
+  /** 0 à 1 — jamais affichée comme une certitude scientifique. */
+  mappingConfidence?: number;
 }
+
+export type DatasetMappingSource =
+  | "exact_question_id"
+  | "question_text_similarity"
+  | "modality_match"
+  | "user_defined";
+
+export type DatasetMappingStatus =
+  | "proposed"
+  | "confirmed"
+  | "user_modified"
+  | "rejected"
+  | "unknown";
 
 
 // ============================================================

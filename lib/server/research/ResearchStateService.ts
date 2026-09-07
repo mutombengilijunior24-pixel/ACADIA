@@ -157,6 +157,34 @@ export async function updateResearchProjectRecord(
 }
 
 /**
+ * Applique une correction de mapping (Module 3) sur UNE colonne
+ * d'un dataset déjà importé. Ne touche à aucune autre colonne, ni
+ * aux lignes. Retourne null si le projet n'existe pas, n'appartient
+ * pas à ownerId, n'a pas de dataset, ou si la colonne est introuvable.
+ */
+export async function updateDatasetColumnMapping(
+  ownerId: string,
+  id: string,
+  columnId: string,
+  patch: Partial<Pick<ScientificDataset["columns"][number], "variableId" | "dimensionId" | "indicatorId" | "sourceQuestionId" | "mappingStatus" | "mappingSource" | "mappingConfidence">>
+): Promise<ScientificDataset | null> {
+  const existing = await prisma.researchProject.findUnique({ where: { id } });
+  if (!existing || existing.ownerId !== ownerId || !existing.dataset) return null;
+
+  const dataset = safeParse<ScientificDataset | null>(existing.dataset, null);
+  if (!dataset) return null;
+
+  const columnIndex = dataset.columns.findIndex((c) => c.id === columnId);
+  if (columnIndex === -1) return null;
+
+  dataset.columns[columnIndex] = { ...dataset.columns[columnIndex], ...patch };
+  dataset.updatedAt = new Date().toISOString();
+
+  await prisma.researchProject.update({ where: { id }, data: { dataset: JSON.stringify(dataset) } });
+  return dataset;
+}
+
+/**
  * Archive un projet (status="archived") plutôt qu'une suppression
  * réelle — cohérent avec la limite déjà assumée par ce service
  * ("ne supprime jamais une ligne", voir en-tête du fichier) et avec
