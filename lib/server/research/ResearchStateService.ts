@@ -18,6 +18,7 @@ import type { Dataset as ScientificDataset } from "@/lib/core/dataset/DatasetTyp
 import type { InstrumentRecord } from "@/contexts/ResearchContext";
 import type { TheoreticalFrameworkEntry } from "@/lib/core/research/TheoreticalFrameworkTypes";
 import type { ScientificInterpretationContent } from "@/lib/core/analysis/ScientificInterpretationTypes";
+import type { ScientificConclusionContent } from "@/lib/core/analysis/ScientificConclusionTypes";
 
 export interface ResearchStateBundle {
   researches: Research[];
@@ -354,6 +355,66 @@ export async function appendScientificConclusionRecord(
 
   await prisma.researchProject.update({ where: { id }, data: { payload: JSON.stringify(project) } });
   return true;
+}
+
+/**
+ * Ajoute la formulation IA (Mission 7, bloc 2) à UNE conclusion
+ * scientifique déjà existante — ne crée jamais une nouvelle entrée,
+ * ne touche à aucune autre conclusion de l'historique. Retourne null
+ * si le projet/la conclusion n'existe pas ou n'appartient pas à
+ * ownerId.
+ */
+export async function setScientificConclusionContent(
+  ownerId: string,
+  id: string,
+  conclusionId: string,
+  content: NonNullable<NonNullable<ScientificProject["scientificConclusions"]>[number]["content"]>
+): Promise<NonNullable<ScientificProject["scientificConclusions"]>[number] | null> {
+  const existing = await prisma.researchProject.findUnique({ where: { id } });
+  if (!existing || existing.ownerId !== ownerId) return null;
+
+  const project = safeParse<ScientificProject>(existing.payload, {} as ScientificProject);
+  const conclusions = project.scientificConclusions ?? [];
+  const index = conclusions.findIndex((c) => c.id === conclusionId);
+  if (index === -1) return null;
+
+  conclusions[index] = { ...conclusions[index], content };
+  project.scientificConclusions = conclusions;
+
+  await prisma.researchProject.update({ where: { id }, data: { payload: JSON.stringify(project) } });
+  return conclusions[index];
+}
+
+/**
+ * Applique une décision de validation humaine (Mission 7, bloc 2 —
+ * accept/reject/edit, même workflow que Mission 6) sur le contenu
+ * d'UNE conclusion déjà formulée par l'IA. Fusion partielle : seuls
+ * les champs fournis dans `patch` sont remplacés. Retourne null si le
+ * projet/la conclusion/son contenu n'existe pas ou n'appartient pas à
+ * ownerId.
+ */
+export async function updateScientificConclusionContent(
+  ownerId: string,
+  id: string,
+  conclusionId: string,
+  patch: Partial<ScientificConclusionContent>
+): Promise<NonNullable<ScientificProject["scientificConclusions"]>[number] | null> {
+  const existing = await prisma.researchProject.findUnique({ where: { id } });
+  if (!existing || existing.ownerId !== ownerId) return null;
+
+  const project = safeParse<ScientificProject>(existing.payload, {} as ScientificProject);
+  const conclusions = project.scientificConclusions ?? [];
+  const index = conclusions.findIndex((c) => c.id === conclusionId);
+  if (index === -1 || !conclusions[index].content) return null;
+
+  conclusions[index] = {
+    ...conclusions[index],
+    content: { ...conclusions[index].content!, ...patch },
+  };
+  project.scientificConclusions = conclusions;
+
+  await prisma.researchProject.update({ where: { id }, data: { payload: JSON.stringify(project) } });
+  return conclusions[index];
 }
 
 /**

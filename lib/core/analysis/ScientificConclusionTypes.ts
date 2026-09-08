@@ -16,7 +16,8 @@
 // décider (voir ScientificConclusionAI.ts).
 // ============================================================
 
-import type { HypothesisAssessmentDecision } from "./ScientificInterpretationTypes";
+import type { HypothesisAssessmentDecision, GuardViolation } from "./ScientificInterpretationTypes";
+import type { ValidationStatus } from "./ScientificDiscussionTypes";
 import type { ConfidenceLevel } from "@/lib/core/research/ResearchTypes";
 
 export type ObjectiveCoverageStatus = "FULL" | "PARTIAL" | "NONE";
@@ -85,6 +86,39 @@ export interface ResearchQuestionConclusion {
   generatedAt: string;
 }
 
+/**
+ * Reformulation académique par IA (bloc 2) d'un ScientificConclusion
+ * déjà entièrement tranché par le moteur déterministe (bloc 1).
+ * Chaque champ est le texte reformulé équivalent à son homologue
+ * déterministe (researchQuestionConclusion.conclusion,
+ * objectiveConclusions[].conclusion, hypothesisConclusions[].conclusion,
+ * generalConclusion, limitations, warnings) — jamais une nouvelle
+ * décision, jamais un nouveau chiffre (voir ScientificConclusionValidator.ts,
+ * qui REJETTE ce contenu avant toute persistance si une violation est
+ * détectée — contrairement à Mission 6, ici l'échec bloque, il ne
+ * bascule jamais silencieusement en "needs_review").
+ */
+export interface ScientificConclusionContent {
+  researchQuestionConclusion: string;
+
+  objectiveConclusions: { objectiveId: string; statement: string }[];
+
+  hypothesisConclusions: { hypothesisId: string; statement: string }[];
+
+  generalConclusion: string;
+
+  limitations: string[];
+
+  warnings: string[];
+
+  validationStatus: ValidationStatus;
+
+  /** Présent uniquement si un garde-fou a détecté un problème lors d'une ÉDITION humaine ultérieure (jamais lors de la génération IA initiale, qui est bloquée avant persistance en cas de violation). */
+  guardWarnings?: GuardViolation[];
+
+  generatedAt: string;
+}
+
 export interface ScientificConclusion {
   id: string;
 
@@ -108,6 +142,9 @@ export interface ScientificConclusion {
   limitations: string[];
 
   warnings: string[];
+
+  /** Absent tant que le bloc 2 (formulation IA) n'a pas encore été exécuté pour cette conclusion. */
+  content?: ScientificConclusionContent;
 
   /** Horodatages capturés à la génération — jamais recalculés après coup (voir isInterpretationOutdated, réutilisé tel quel). */
   datasetUpdatedAt: string;
