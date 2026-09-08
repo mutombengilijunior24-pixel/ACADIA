@@ -1,10 +1,14 @@
 // ============================================================
-// ACADIA — GÉNÉRATION DE L'INTERPRÉTATION SCIENTIFIQUE (Mission 6, incrément 1)
+// ACADIA — GÉNÉRATION DE L'INTERPRÉTATION SCIENTIFIQUE (Mission 6, incréments 1 et 4)
 //
 // Incrément 1 : décision d'hypothèse uniquement (voir
 // HypothesisAssessmentEngine.ts) — aucune prose IA, zéro appel
 // OpenAI. Lit un StatisticalAnalysisRun déjà exécuté (Mission 5)
 // sans jamais recalculer une statistique.
+//
+// Incrément 4 : capture datasetUpdatedAt/analysisPlanUpdatedAt au
+// moment de la génération — jamais recalculés après coup, comparés à
+// la valeur courante à la lecture pour dériver `isOutdated`.
 // ============================================================
 
 import { randomUUID } from "node:crypto";
@@ -13,6 +17,13 @@ import { getResearchProjectRecord, appendScientificInterpretationRecord } from "
 import { assessHypotheses } from "@/lib/core/analysis/HypothesisAssessmentEngine";
 import { logAudit } from "@/lib/server/audit/AuditLog";
 import { z } from "zod";
+
+function readDatasetUpdatedAt(dataset: unknown): string {
+  if (dataset && typeof dataset === "object" && "updatedAt" in dataset && typeof (dataset as { updatedAt: unknown }).updatedAt === "string") {
+    return (dataset as { updatedAt: string }).updatedAt;
+  }
+  return "";
+}
 
 export const runtime = "nodejs";
 
@@ -51,6 +62,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     projectId: id,
     statisticalRunId: run.id,
     hypothesisAssessments,
+    datasetUpdatedAt: readDatasetUpdatedAt(record.dataset),
+    analysisPlanUpdatedAt: record.project.analysisPlan.updatedAt,
     createdAt: new Date().toISOString(),
   };
 

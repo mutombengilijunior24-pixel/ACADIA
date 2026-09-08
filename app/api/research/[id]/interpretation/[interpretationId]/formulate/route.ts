@@ -1,5 +1,5 @@
 // ============================================================
-// ACADIA — FORMULATION IA D'UNE INTERPRÉTATION SCIENTIFIQUE (Mission 6, incréments 2-3)
+// ACADIA — FORMULATION IA D'UNE INTERPRÉTATION SCIENTIFIQUE (Mission 6, incréments 2-4)
 //
 // Étape volontairement séparée de la génération déterministe
 // (interpretation/generate) — voir mission §hybride "rules-first,
@@ -14,16 +14,20 @@
 // (InterpretationGuards.ts) — toute violation détectée fait basculer
 // validationStatus à "needs_review" au lieu de "generated" ; le texte
 // lui-même n'est jamais modifié ni rejeté, seul son statut change.
+//
+// Incrément 4 : refuse de dépenser un appel OpenAI sur une base
+// obsolète (dataset/plan modifiés depuis le run associé — voir
+// isInterpretationOutdated), et refuse d'écraser silencieusement une
+// formulation déjà validée par un humain ("accepted"/"edited") sauf
+// si l'appelant confirme explicitement via { force: true }.
 // ============================================================
 
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import { getSessionUser, unauthorized, forbidden, notFound } from "@/lib/supervision/apiAuth";
 import { getResearchProjectRecord, setScientificInterpretationContent } from "@/lib/server/research/ResearchStateService";
-import {
-  interpretScientificResults,
-  type ScientificInterpretationContext,
-  type ScientificInterpretationResultContext,
-} from "@/lib/ai/openai/ScientificInterpretationAI";
+import { interpretScientificResults } from "@/lib/ai/openai/ScientificInterpretationAI";
+import { buildScientificInterpretationContext, isInterpretationOutdated } from "@/lib/server/research/ScientificInterpretationContextBuilder";
 import { runInterpretationGuards } from "@/lib/core/analysis/InterpretationGuards";
 import { classifyAIError, sanitizeMessage, AI_USER_FACING_ERROR } from "@/lib/ai/openai/errorClassification";
 import { rateLimiter, rateLimitKey } from "@/lib/server/security/RateLimiter";
@@ -32,18 +36,14 @@ import type { ScientificFinding, ScientificInterpretationContent } from "@/lib/c
 
 export const runtime = "nodejs";
 
-/**
- * Arrondit à 6 chiffres significatifs avant transmission à l'IA — une
- * p-value comme 2.5396285894708624e-10 (mantisse brute d'un flottant
- * JS) resterait exacte non arrondie, mais produit une prose illisible
- * si l'IA la recopie telle quelle. 6 chiffres significatifs préservent
- * l'ordre de grandeur (donc la lecture "très significatif") sans
- * jamais arrondir à un faux zéro.
- */
-function roundSignificant(value: number | null): number | null {
-  if (value === null || !Number.isFinite(value)) return value;
-  return Number(value.toPrecision(6));
+function readDatasetUpdatedAt(dataset: unknown): string | undefined {
+  if (dataset && typeof dataset === "object" && "updatedAt" in dataset && typeof (dataset as { updatedAt: unknown }).updatedAt === "string") {
+    return (dataset as { updatedAt: string }).updatedAt;
+  }
+  return undefined;
 }
+
+const bodySchema = z.object({ force: z.boolean().optional() });
 
 export async function POST(request: Request, context: { params: Promise<{ id: string; interpretationId: string }> }) {
   const user = await getSessionUser();
@@ -67,74 +67,25 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const run = (record.project.statisticalRuns ?? []).find((r) => r.id === interpretation.statisticalRunId);
   if (!run) return notFound("Exécution statistique associée introuvable.");
 
-  const variableById = new Map(record.project.variables.map((v) => [v.id, v]));
+  if (isInterpretationOutdated(readDatasetUpdatedAt(record.dataset), record.project.analysisPlan?.updatedAt, interpretation)) {
+    return Response.json(
+      { error: "Cette interprétation est obsolète : le dataset ou le plan d'analyse ont changé depuis. Générez une nouvelle interprétation avant de la formuler." },
+      { status: 409 }
+    );
+  }
+
+  const parsed = bodySchema.safeParse(await request.json().catch(() => ({})));
+  const force = parsed.success ? Boolean(parsed.data.force) : false;
+  if (interpretation.content && (interpretation.content.validationStatus === "accepted" || interpretation.content.validationStatus === "edited") && !force) {
+    return Response.json(
+      { error: "Cette interprétation a déjà été validée par un chercheur (acceptée ou éditée) — passez force: true pour la régénérer et écraser cette validation." },
+      { status: 409 }
+    );
+  }
+
   const knownResultIds = new Set(run.results.map((r) => r.id));
   const knownHypothesisIds = new Set(record.project.hypotheses.map((h) => h.id));
-
-  const results: ScientificInterpretationResultContext[] = run.results
-    .filter((r) => r.status === "completed")
-    .map((r) => ({
-      id: r.id,
-      analysisType: r.analysisType,
-      label: r.variableIds.map((vid) => variableById.get(vid)?.name ?? vid).join(" × "),
-      n: r.n,
-      warnings: r.warnings,
-      descriptive: r.descriptive
-        ? {
-            frequencyTable: r.descriptive.frequencyTable?.map((f) => ({
-              label: f.label,
-              count: f.count,
-              percentage: f.percentage,
-              validPercentage: f.validPercentage,
-            })),
-            numericalStatistics: r.descriptive.numericalStatistics
-              ? {
-                  min: roundSignificant(r.descriptive.numericalStatistics.min),
-                  max: roundSignificant(r.descriptive.numericalStatistics.max),
-                  mean: roundSignificant(r.descriptive.numericalStatistics.mean),
-                  median: roundSignificant(r.descriptive.numericalStatistics.median),
-                  standardDeviation: roundSignificant(r.descriptive.numericalStatistics.standardDeviation),
-                }
-              : undefined,
-          }
-        : undefined,
-      bivariate: r.bivariate
-        ? {
-            method: r.bivariate.method,
-            chiSquare: r.bivariate.chiSquare
-              ? {
-                  pValue: roundSignificant(r.bivariate.chiSquare.pValue),
-                  cramersV: roundSignificant(r.bivariate.chiSquare.cramersV),
-                  assumptionsMet: r.bivariate.chiSquare.assumptionsMet,
-                }
-              : undefined,
-            pearson: r.bivariate.pearson
-              ? { coefficient: roundSignificant(r.bivariate.pearson.coefficient), pValue: roundSignificant(r.bivariate.pearson.pValue) }
-              : undefined,
-            spearman: r.bivariate.spearman
-              ? { coefficient: roundSignificant(r.bivariate.spearman.coefficient), pValue: roundSignificant(r.bivariate.spearman.pValue) }
-              : undefined,
-          }
-        : undefined,
-    }));
-
-  const aiContext: ScientificInterpretationContext = {
-    project: {
-      title: record.project.title,
-      researchType: record.project.researchType,
-      domain: record.project.domain,
-    },
-    sampleSize: run.results.reduce((max, r) => Math.max(max, r.n), 0),
-    alpha: run.alpha,
-    hypotheses: interpretation.hypothesisAssessments.map((a) => ({
-      hypothesisId: a.hypothesisId,
-      statement: a.statement,
-      decision: a.decision,
-      confidence: a.confidence,
-      rationale: a.rationale,
-    })),
-    results,
-  };
+  const aiContext = buildScientificInterpretationContext(record.project, run, interpretation.hypothesisAssessments);
 
   try {
     const aiResult = await interpretScientificResults(aiContext);
@@ -170,7 +121,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       action: "SCIENTIFIC_INTERPRETATION_FORMULATED",
       entityType: "ResearchProject",
       entityId: id,
-      metadata: { interpretationId, findingCount: findings.length, guardViolationCount: guardViolations.length },
+      metadata: { interpretationId, findingCount: findings.length, guardViolationCount: guardViolations.length, forced: force },
     });
 
     return Response.json({ interpretation: updated }, { status: 200 });

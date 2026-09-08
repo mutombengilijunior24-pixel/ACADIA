@@ -118,5 +118,16 @@ export interface ScientificInterpretation {
   /** Absent tant que l'incrément 2 (formulation IA) n'a pas encore été exécuté pour cette interprétation. */
   content?: ScientificInterpretationContent;
 
+  /**
+   * Horodatages de Dataset.updatedAt / AnalysisPlan.updatedAt au
+   * moment de la génération (incrément 4) — jamais recalculés après
+   * coup. Comparés à la valeur actuelle au moment de la lecture pour
+   * dériver `isOutdated` (jamais persisté — toujours recalculé, pour
+   * ne jamais risquer un indicateur d'obsolescence lui-même obsolète).
+   */
+  datasetUpdatedAt: string;
+
+  analysisPlanUpdatedAt: string;
+
   createdAt: string;
 }

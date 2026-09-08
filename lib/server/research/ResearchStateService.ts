@@ -17,6 +17,7 @@ import type { ResearchProject as ScientificProject } from "@/lib/core/research/R
 import type { Dataset as ScientificDataset } from "@/lib/core/dataset/DatasetTypes";
 import type { InstrumentRecord } from "@/contexts/ResearchContext";
 import type { TheoreticalFrameworkEntry } from "@/lib/core/research/TheoreticalFrameworkTypes";
+import type { ScientificInterpretationContent } from "@/lib/core/analysis/ScientificInterpretationTypes";
 
 export interface ResearchStateBundle {
   researches: Research[];
@@ -295,6 +296,39 @@ export async function setScientificInterpretationContent(
   if (index === -1) return null;
 
   interpretations[index] = { ...interpretations[index], content };
+  project.scientificInterpretations = interpretations;
+
+  await prisma.researchProject.update({ where: { id }, data: { payload: JSON.stringify(project) } });
+  return interpretations[index];
+}
+
+/**
+ * Applique une décision de validation humaine (Mission 6, incrément
+ * 4 — accept/reject/edit) sur le contenu d'UNE interprétation déjà
+ * formulée par l'IA. Fusion partielle : seuls les champs fournis dans
+ * `patch` sont remplacés (ex. accept/reject ne passent que
+ * validationStatus, edit passe aussi summary/findings/...). Retourne
+ * null si le projet/l'interprétation/son contenu n'existe pas ou
+ * n'appartient pas à ownerId.
+ */
+export async function updateScientificInterpretationContent(
+  ownerId: string,
+  id: string,
+  interpretationId: string,
+  patch: Partial<ScientificInterpretationContent>
+): Promise<NonNullable<ScientificProject["scientificInterpretations"]>[number] | null> {
+  const existing = await prisma.researchProject.findUnique({ where: { id } });
+  if (!existing || existing.ownerId !== ownerId) return null;
+
+  const project = safeParse<ScientificProject>(existing.payload, {} as ScientificProject);
+  const interpretations = project.scientificInterpretations ?? [];
+  const index = interpretations.findIndex((i) => i.id === interpretationId);
+  if (index === -1 || !interpretations[index].content) return null;
+
+  interpretations[index] = {
+    ...interpretations[index],
+    content: { ...interpretations[index].content!, ...patch },
+  };
   project.scientificInterpretations = interpretations;
 
   await prisma.researchProject.update({ where: { id }, data: { payload: JSON.stringify(project) } });

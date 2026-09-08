@@ -9,7 +9,14 @@
 // dans leur état "non renseigné", jamais hallucinées.
 // ============================================================
 
-export type ValidationStatus = "generated" | "needs_review" | "accepted" | "edited";
+/**
+ * "rejected" ajouté par Mission 6 (incrément 4) pour le workflow de
+ * validation humaine de ScientificInterpretationContent — un
+ * chercheur rejette explicitement une formulation IA plutôt que de
+ * simplement l'ignorer, distinct de "needs_review" (signalé
+ * automatiquement par un garde-fou, pas encore examiné).
+ */
+export type ValidationStatus = "generated" | "needs_review" | "accepted" | "edited" | "rejected";
 
 export interface DiscussionSection {
   id: string;

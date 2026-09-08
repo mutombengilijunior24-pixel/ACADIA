@@ -1,11 +1,19 @@
 // ============================================================
-// ACADIA — LISTE DES INTERPRÉTATIONS SCIENTIFIQUES (Mission 6, incrément 1)
+// ACADIA — LISTE DES INTERPRÉTATIONS SCIENTIFIQUES (Mission 6, incréments 1 et 4)
 // ============================================================
 
 import { getSessionUser, unauthorized, forbidden, notFound } from "@/lib/supervision/apiAuth";
 import { getResearchProjectRecord } from "@/lib/server/research/ResearchStateService";
+import { isInterpretationOutdated } from "@/lib/server/research/ScientificInterpretationContextBuilder";
 
 export const runtime = "nodejs";
+
+function readDatasetUpdatedAt(dataset: unknown): string | undefined {
+  if (dataset && typeof dataset === "object" && "updatedAt" in dataset && typeof (dataset as { updatedAt: unknown }).updatedAt === "string") {
+    return (dataset as { updatedAt: string }).updatedAt;
+  }
+  return undefined;
+}
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser();
@@ -18,6 +26,13 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     return forbidden("Ce projet ne vous appartient pas.", { actorId: user.id, entityType: "ResearchProject", entityId: id });
   }
 
-  const interpretations = record.project.scientificInterpretations ?? [];
+  const currentDatasetUpdatedAt = readDatasetUpdatedAt(record.dataset);
+  const currentAnalysisPlanUpdatedAt = record.project.analysisPlan?.updatedAt;
+
+  const interpretations = (record.project.scientificInterpretations ?? []).map((i) => ({
+    ...i,
+    isOutdated: isInterpretationOutdated(currentDatasetUpdatedAt, currentAnalysisPlanUpdatedAt, i),
+  }));
+
   return Response.json({ interpretations }, { status: 200 });
 }
