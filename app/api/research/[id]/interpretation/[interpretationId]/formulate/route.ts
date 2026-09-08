@@ -1,5 +1,5 @@
 // ============================================================
-// ACADIA — FORMULATION IA D'UNE INTERPRÉTATION SCIENTIFIQUE (Mission 6, incrément 2)
+// ACADIA — FORMULATION IA D'UNE INTERPRÉTATION SCIENTIFIQUE (Mission 6, incréments 2-3)
 //
 // Étape volontairement séparée de la génération déterministe
 // (interpretation/generate) — voir mission §hybride "rules-first,
@@ -9,6 +9,11 @@
 // statistique. Toute référence à un résultat/une hypothèse renvoyée
 // par l'IA est revérifiée contre les identifiants réellement connus
 // avant persistance (voir ScientificInterpretationAI.ts en-tête).
+//
+// Incrément 3 : la prose est ensuite passée aux garde-fous
+// (InterpretationGuards.ts) — toute violation détectée fait basculer
+// validationStatus à "needs_review" au lieu de "generated" ; le texte
+// lui-même n'est jamais modifié ni rejeté, seul son statut change.
 // ============================================================
 
 import { randomUUID } from "node:crypto";
@@ -19,6 +24,7 @@ import {
   type ScientificInterpretationContext,
   type ScientificInterpretationResultContext,
 } from "@/lib/ai/openai/ScientificInterpretationAI";
+import { runInterpretationGuards } from "@/lib/core/analysis/InterpretationGuards";
 import { classifyAIError, sanitizeMessage, AI_USER_FACING_ERROR } from "@/lib/ai/openai/errorClassification";
 import { rateLimiter, rateLimitKey } from "@/lib/server/security/RateLimiter";
 import { logAudit } from "@/lib/server/audit/AuditLog";
@@ -150,6 +156,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       generatedAt: new Date().toISOString(),
     };
 
+    const guardViolations = runInterpretationGuards(content, aiContext);
+    if (guardViolations.length > 0) {
+      content.validationStatus = "needs_review";
+      content.guardWarnings = guardViolations;
+    }
+
     const updated = await setScientificInterpretationContent(user.id, id, interpretationId, content);
     if (!updated) return notFound();
 
@@ -158,7 +170,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       action: "SCIENTIFIC_INTERPRETATION_FORMULATED",
       entityType: "ResearchProject",
       entityId: id,
-      metadata: { interpretationId, findingCount: findings.length },
+      metadata: { interpretationId, findingCount: findings.length, guardViolationCount: guardViolations.length },
     });
 
     return Response.json({ interpretation: updated }, { status: 200 });

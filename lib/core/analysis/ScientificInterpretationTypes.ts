@@ -14,8 +14,13 @@
 // `relatedHypothesisId` sont systématiquement filtrés côté serveur
 // après réception (voir ScientificInterpretationAI.ts) pour ne
 // jamais persister une référence à un résultat/une hypothèse
-// inexistante — un contrôle de traçabilité basique, pas encore le
-// NumericConsistencyGuard complet prévu à l'incrément 3.
+// inexistante — un contrôle de traçabilité basique.
+//
+// Incrément 3 : garde-fous de vérification (voir
+// InterpretationGuards.ts) appliqués sur la prose de l'incrément 2 —
+// CausalityGuard, NumericConsistencyGuard, ContradictionGuard. Toute
+// violation détectée fait basculer validationStatus à "needs_review"
+// et est consignée dans guardWarnings, jamais corrigée automatiquement.
 // ============================================================
 
 import type { ConfidenceLevel } from "@/lib/core/research/ResearchTypes";
@@ -65,6 +70,24 @@ export interface ScientificFinding {
   relatedHypothesisId?: string;
 }
 
+/**
+ * Violation détectée a posteriori par un garde-fou (Mission 6,
+ * incrément 3) — voir InterpretationGuards.ts. Jamais utilisée pour
+ * corriger ou supprimer automatiquement le texte concerné : sa seule
+ * conséquence est de faire basculer `validationStatus` à
+ * "needs_review" et de rendre le problème visible au chercheur.
+ */
+export interface GuardViolation {
+  guard: "causality" | "numeric_consistency" | "contradiction";
+
+  /** Chemin du champ concerné (ex. "findings[2].statement"). */
+  field: string;
+
+  snippet: string;
+
+  reason: string;
+}
+
 export interface ScientificInterpretationContent {
   summary: string;
 
@@ -76,6 +99,9 @@ export interface ScientificInterpretationContent {
   limitations: string[];
 
   validationStatus: ValidationStatus;
+
+  /** Présent uniquement si au moins un garde-fou a détecté un problème — voir GuardViolation. */
+  guardWarnings?: GuardViolation[];
 
   generatedAt: string;
 }
