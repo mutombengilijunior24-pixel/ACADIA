@@ -18,6 +18,7 @@
 import type { AnalysisPlan } from "@/lib/core/analysis/AnalysisPlanTypes";
 import type { StatisticalAnalysisRun } from "@/lib/core/statistics/StatisticalTypes";
 import type { ScientificInterpretation } from "@/lib/core/analysis/ScientificInterpretationTypes";
+import type { ScientificConclusion } from "@/lib/core/analysis/ScientificConclusionTypes";
 
 
 // ============================================================
@@ -804,6 +805,15 @@ export interface ResearchProject {
   // ----------------------------------------------------------
 
   scientificInterpretations?: ScientificInterpretation[];
+
+  // ----------------------------------------------------------
+  // CONCLUSIONS SCIENTIFIQUES (Mission 7) — additif, historique
+  // complet conservé (même discipline que scientificInterpretations
+  // et statisticalRuns : jamais écrasé, chaque génération reste
+  // consultable).
+  // ----------------------------------------------------------
+
+  scientificConclusions?: ScientificConclusion[];
 
   // ----------------------------------------------------------
   // MÉTADONNÉES

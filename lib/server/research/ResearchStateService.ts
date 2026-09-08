@@ -336,6 +336,27 @@ export async function updateScientificInterpretationContent(
 }
 
 /**
+ * Ajoute une conclusion scientifique (Mission 7) à l'historique du
+ * projet — n'écrase jamais une conclusion précédente (même
+ * discipline que appendScientificInterpretationRecord/
+ * appendStatisticalRunRecord : chaque génération reste consultable).
+ */
+export async function appendScientificConclusionRecord(
+  ownerId: string,
+  id: string,
+  conclusion: NonNullable<ScientificProject["scientificConclusions"]>[number]
+): Promise<boolean> {
+  const existing = await prisma.researchProject.findUnique({ where: { id } });
+  if (!existing || existing.ownerId !== ownerId) return false;
+
+  const project = safeParse<ScientificProject>(existing.payload, {} as ScientificProject);
+  project.scientificConclusions = [...(project.scientificConclusions ?? []), conclusion];
+
+  await prisma.researchProject.update({ where: { id }, data: { payload: JSON.stringify(project) } });
+  return true;
+}
+
+/**
  * Archive un projet (status="archived") plutôt qu'une suppression
  * réelle — cohérent avec la limite déjà assumée par ce service
  * ("ne supprime jamais une ligne", voir en-tête du fichier) et avec
