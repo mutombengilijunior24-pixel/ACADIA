@@ -274,6 +274,34 @@ export async function appendScientificInterpretationRecord(
 }
 
 /**
+ * Ajoute la formulation IA (Mission 6, incrément 2) à UNE
+ * interprétation scientifique déjà existante — ne crée jamais une
+ * nouvelle entrée, ne touche à aucune autre interprétation de
+ * l'historique. Retourne null si le projet/l'interprétation
+ * n'existe pas ou n'appartient pas à ownerId.
+ */
+export async function setScientificInterpretationContent(
+  ownerId: string,
+  id: string,
+  interpretationId: string,
+  content: NonNullable<NonNullable<ScientificProject["scientificInterpretations"]>[number]["content"]>
+): Promise<NonNullable<ScientificProject["scientificInterpretations"]>[number] | null> {
+  const existing = await prisma.researchProject.findUnique({ where: { id } });
+  if (!existing || existing.ownerId !== ownerId) return null;
+
+  const project = safeParse<ScientificProject>(existing.payload, {} as ScientificProject);
+  const interpretations = project.scientificInterpretations ?? [];
+  const index = interpretations.findIndex((i) => i.id === interpretationId);
+  if (index === -1) return null;
+
+  interpretations[index] = { ...interpretations[index], content };
+  project.scientificInterpretations = interpretations;
+
+  await prisma.researchProject.update({ where: { id }, data: { payload: JSON.stringify(project) } });
+  return interpretations[index];
+}
+
+/**
  * Archive un projet (status="archived") plutôt qu'une suppression
  * réelle — cohérent avec la limite déjà assumée par ce service
  * ("ne supprime jamais une ligne", voir en-tête du fichier) et avec
