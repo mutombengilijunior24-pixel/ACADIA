@@ -7,6 +7,7 @@ import {
 } from "@/lib/core/research/ResearchIntelligenceEngine";
 import { getSessionUser, unauthorized } from "@/lib/supervision/apiAuth";
 import { rateLimiter, rateLimitKey } from "@/lib/server/security/RateLimiter";
+import { trackProductEvent } from "@/lib/server/analytics/ProductEvents";
 
 export const runtime = "nodejs";
 
@@ -110,6 +111,15 @@ export async function POST(request: Request) {
     );
   }
 
+  // A1 et A2 s'exécutent dans le même appel (analyzeResearch()
+  // orchestre les deux séquentiellement, réponse unique) — il n'existe
+  // aujourd'hui aucun moment intermédiaire visible côté client entre
+  // les deux. Les tracker comme démarrant/se terminant ensemble reflète
+  // fidèlement le parcours réel actuel, ce n'est jamais un événement
+  // inventé (voir mission §2).
+  await trackProductEvent({ userId: user.id, eventType: "A1_STARTED" });
+  await trackProductEvent({ userId: user.id, eventType: "A2_STARTED" });
+
   try {
     const result = await analyzeResearch(research);
 
@@ -130,6 +140,15 @@ export async function POST(request: Request) {
     }
 
     // status "ready" ou "needs_review" : succès exploitable.
+    await trackProductEvent({ userId: user.id, eventType: "A1_COMPLETED", projectId: result.project?.id });
+    await trackProductEvent({ userId: user.id, eventType: "A2_COMPLETED", projectId: result.project?.id });
+    await trackProductEvent({
+      userId: user.id,
+      eventType: "VARIABLES_GENERATED",
+      projectId: result.project?.id,
+      metadata: { count: result.project?.variables?.length ?? 0 },
+    });
+
     return NextResponse.json({
       success: true,
       data: result,

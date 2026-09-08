@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect } from "react";
 import { useResearch } from "@/contexts/ResearchContext";
 import { useRouter, useParams } from "next/navigation";
+import { trackClientEvent } from "@/lib/client/trackEvent";
 import ResearchConsistencyOverview from "@/components/research/consistency/ResearchConsistencyOverview";
 import ResearchChainView from "@/components/research/consistency/ResearchChainView";
 import MethodologyOverview from "@/components/research/consistency/MethodologyOverview";
@@ -56,6 +58,11 @@ export default function ResearchProjectPage() {
   const research = researches.find(
     (item) => item.id === id
   );
+
+  useEffect(() => {
+    if (id) trackClientEvent("PROJECT_OPENED", { projectId: id });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   // --------------------------------------------------------
   // Le projet scientifique complet (variables/relations/

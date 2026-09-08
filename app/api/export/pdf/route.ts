@@ -12,9 +12,11 @@
 // ============================================================
 
 import { existsSync } from "node:fs";
+import path from "node:path";
 import { createElement as h, type ReactElement } from "react";
 import { Document, Page, View, Text, StyleSheet, renderToBuffer, Font } from "@react-pdf/renderer";
 import type { DocumentModel, DocumentChapterModel, DocumentTableModel, DocumentFigureModel } from "@/lib/core/export/DocumentTypes";
+import { getSessionUser, unauthorized } from "@/lib/supervision/apiAuth";
 
 export const runtime = "nodejs";
 
@@ -22,26 +24,35 @@ Font.registerHyphenationCallback((word) => [word]);
 
 // ------------------------------------------------------------
 // La police "Times-Roman" standard intégrée à @react-pdf/renderer
-// ne couvre pas les symboles grecs/mathématiques (χ, β, ρ, ², ≠…)
-// pourtant courants dans les résultats statistiques (P8/P9) — ils
-// s'affichaient déformés. Sur un serveur Windows, la vraie police
-// Times New Roman (couverture Unicode complète, incluant le grec)
-// est déjà présente sur le système : on l'enregistre si disponible,
-// sans dépendance ni police embarquée supplémentaire ; sinon on
-// retombe silencieusement sur la police standard PDF intégrée.
+// ne couvre pas les symboles grecs/mathématiques (χ, β, ρ, α, ≤, ≥,
+// ², ³…) pourtant courants dans les résultats statistiques (P8/P9) —
+// ils s'affichaient déformés. La version précédente ne s'appuyait que
+// sur Times New Roman présente sur un poste Windows local, absente
+// sur tout hébergement Linux/Vercel (voir audit "100 étudiants" du
+// 08/09/2026) : le rendu s'y dégradait silencieusement.
+//
+// Noto Serif (SIL Open Font License 1.1, voir fonts/OFL-LICENSE.txt)
+// est embarquée directement dans le dépôt, à côté de cette route, pour
+// que le traceur de fichiers de Vercel l'inclue dans le bundle de la
+// fonction serverless. Couverture Unicode large (latin étendu, grec,
+// symboles mathématiques) garantie identique sur toute plateforme —
+// aucun téléchargement au runtime, aucune dépendance à l'OS hôte.
 // ------------------------------------------------------------
 
-const WINDOWS_FONTS_DIR = "C:/Windows/Fonts";
-const CUSTOM_FONT_FAMILY = "AcadiaTimes";
+const FONTS_DIR = path.join(process.cwd(), "app/api/export/pdf/fonts");
+const CUSTOM_FONT_FAMILY = "AcadiaSerif";
 
-function tryRegisterSystemTimesNewRoman(): boolean {
+function tryRegisterBundledFont(): boolean {
   const files = {
-    regular: `${WINDOWS_FONTS_DIR}/times.ttf`,
-    bold: `${WINDOWS_FONTS_DIR}/timesbd.ttf`,
-    italic: `${WINDOWS_FONTS_DIR}/timesi.ttf`,
-    boldItalic: `${WINDOWS_FONTS_DIR}/timesbi.ttf`,
+    regular: path.join(FONTS_DIR, "NotoSerif-Regular.ttf"),
+    bold: path.join(FONTS_DIR, "NotoSerif-Bold.ttf"),
+    italic: path.join(FONTS_DIR, "NotoSerif-Italic.ttf"),
+    boldItalic: path.join(FONTS_DIR, "NotoSerif-BoldItalic.ttf"),
   };
-  if (!Object.values(files).every((f) => existsSync(f))) return false;
+  if (!Object.values(files).every((f) => existsSync(f))) {
+    console.error("[ACADIA] Police PDF embarquée introuvable — repli sur la police standard PDF (couverture Unicode limitée).");
+    return false;
+  }
   try {
     Font.register({
       family: CUSTOM_FONT_FAMILY,
@@ -53,18 +64,55 @@ function tryRegisterSystemTimesNewRoman(): boolean {
       ],
     });
     return true;
+  } catch (error) {
+    console.error("[ACADIA] Échec de l'enregistrement de la police PDF embarquée :", error instanceof Error ? error.message : error);
+    return false;
+  }
+}
+
+// ------------------------------------------------------------
+// Noto Serif (comme la quasi-totalité des polices "texte", y compris
+// Noto Sans et STIX Two Text — vérifié empiriquement, voir audit "100
+// étudiants" Partie 4) ne couvre PAS ≤/≥ (U+2264/U+2265) : ces deux
+// caractères vivent dans une police "math" séparée. @react-pdf/renderer
+// n'a pas de repli automatique multi-police fiable ici (une chaîne
+// fontFamily séparée par des virgules échoue explicitement — testé en
+// réel) : on segmente donc le texte au moment du rendu et on bascule
+// UNIQUEMENT ≤/≥ vers la police mathématique dédiée, en <Text> imbriqué
+// — un mécanisme réellement supporté par le moteur de mise en page.
+// ------------------------------------------------------------
+
+const MATH_FALLBACK_CHARS = /[≤≥]/;
+const MATH_FALLBACK_SPLIT = /([≤≥])/;
+
+function tryRegisterMathFallbackFont(): boolean {
+  const mathFile = path.join(FONTS_DIR, "NotoSansMath-Regular.ttf");
+  if (!existsSync(mathFile)) return false;
+  try {
+    Font.register({ family: "AcadiaMathFallback", src: mathFile });
+    return true;
   } catch {
     return false;
   }
 }
 
-const HAS_SYSTEM_FONT = tryRegisterSystemTimesNewRoman();
+const HAS_BUNDLED_FONT = tryRegisterBundledFont();
+const HAS_MATH_FALLBACK = HAS_BUNDLED_FONT && tryRegisterMathFallbackFont();
 
-const FONT_REGULAR = HAS_SYSTEM_FONT ? CUSTOM_FONT_FAMILY : "Times-Roman";
-const FONT_BOLD_FAMILY = HAS_SYSTEM_FONT ? CUSTOM_FONT_FAMILY : "Times-Bold";
-const FONT_BOLD_WEIGHT: "bold" | undefined = HAS_SYSTEM_FONT ? "bold" : undefined;
-const FONT_ITALIC_FAMILY = HAS_SYSTEM_FONT ? CUSTOM_FONT_FAMILY : "Times-Italic";
-const FONT_ITALIC_STYLE: "italic" | undefined = HAS_SYSTEM_FONT ? "italic" : undefined;
+/** Découpe `text` en segments, isolant ≤/≥ dans des <Text> imbriqués sur la police de secours — inchangé si la police de secours n'est pas disponible ou si le texte ne contient aucun des deux caractères. */
+function withMathFallback(text: string): string | (string | ReactElement)[] {
+  if (!HAS_MATH_FALLBACK || !MATH_FALLBACK_CHARS.test(text)) return text;
+  return text
+    .split(MATH_FALLBACK_SPLIT)
+    .filter((part) => part.length > 0)
+    .map((part, i) => (MATH_FALLBACK_CHARS.test(part) ? h(Text, { key: i, style: { fontFamily: "AcadiaMathFallback" } }, part) : part));
+}
+
+const FONT_REGULAR = HAS_BUNDLED_FONT ? CUSTOM_FONT_FAMILY : "Times-Roman";
+const FONT_BOLD_FAMILY = HAS_BUNDLED_FONT ? CUSTOM_FONT_FAMILY : "Times-Bold";
+const FONT_BOLD_WEIGHT: "bold" | undefined = HAS_BUNDLED_FONT ? "bold" : undefined;
+const FONT_ITALIC_FAMILY = HAS_BUNDLED_FONT ? CUSTOM_FONT_FAMILY : "Times-Italic";
+const FONT_ITALIC_STYLE: "italic" | undefined = HAS_BUNDLED_FONT ? "italic" : undefined;
 
 const CM_TO_PT = 28.3465;
 
@@ -159,7 +207,7 @@ function renderChapter(chapter: DocumentChapterModel, model: DocumentModel, styl
   const children: ReactElement[] = [h(Text, { style: styles.h1, key: "title" }, `${chapter.number}. ${chapter.title}`)];
   for (const s of chapter.sections) {
     children.push(h(Text, { style: styles.h2, key: `${s.id}-title` }, `${s.number} ${s.title}`));
-    s.paragraphs.forEach((p, i) => children.push(h(Text, { style: styles.paragraph, key: `${s.id}-p-${i}` }, p)));
+    s.paragraphs.forEach((p, i) => children.push(h(Text, { style: styles.paragraph, key: `${s.id}-p-${i}` }, withMathFallback(p))));
     for (const tid of s.tableIds) {
       const t = model.tables.find((x) => x.id === tid);
       if (t) children.push(renderTable(t, styles));
@@ -270,6 +318,9 @@ function buildPdfDocument(model: DocumentModel) {
 }
 
 export async function POST(request: Request) {
+  const user = await getSessionUser();
+  if (!user) return unauthorized();
+
   let model: DocumentModel;
   try {
     model = (await request.json()) as DocumentModel;

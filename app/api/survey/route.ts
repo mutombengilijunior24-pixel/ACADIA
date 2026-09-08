@@ -8,6 +8,7 @@ import { generateSurveyStructure, generateSurveyDescription, slugify, type Surve
 import { controlQuestionnaireQuality } from "@/lib/core/survey/SurveyQualityControl";
 import { rateLimiter, rateLimitKey } from "@/lib/server/security/RateLimiter";
 import { logAudit } from "@/lib/server/audit/AuditLog";
+import { trackProductEvent } from "@/lib/server/analytics/ProductEvents";
 import { classifyAIError, sanitizeMessage, AI_USER_FACING_ERROR } from "@/lib/ai/openai/errorClassification";
 import type { ExtractedQuestion } from "@/lib/ai/openai/SurveyDocumentAI";
 
@@ -91,6 +92,8 @@ export async function POST(request: Request) {
   // l'enregistrement. En cas d'échec IA, on ne crée JAMAIS d'enquête
   // dégradée — l'échec est propagé pour que l'utilisateur voie une
   // erreur claire et un bouton "Réessayer", jamais un frontend figé.
+  await trackProductEvent({ userId: user.id, eventType: "QUESTIONNAIRE_GENERATION_STARTED" });
+
   let generated;
   try {
     generated = await generateSurveyStructure(brief);

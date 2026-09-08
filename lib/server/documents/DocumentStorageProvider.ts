@@ -90,11 +90,43 @@ class LocalDevDocumentStorageProvider implements DocumentStorageProvider {
   }
 }
 
+// ------------------------------------------------------------
+// Fournisseur de secours pour la PRODUCTION uniquement, quand R2
+// n'est pas (ou pas correctement) configuré. Ne retombe JAMAIS sur
+// le disque local en production (éphémère sur un hébergement
+// serverless — voir audit "100 étudiants" du 08/09/2026) : l'écriture
+// échoue avec un message clair et exploitable plutôt que de prétendre
+// silencieusement avoir persisté le fichier. La lecture (download/
+// getMetadata/getSignedUrl) reste gracieuse (retourne "introuvable")
+// pour ne jamais faire planter une fonctionnalité tierce (ex. export
+// PDF, page publique du logo) qui interroge un document par ailleurs
+// absent — seule l'écriture est dangereuse à faire échouer en silence.
+// ------------------------------------------------------------
+class MisconfiguredDocumentStorageProvider implements DocumentStorageProvider {
+  constructor(private readonly reason: string) {}
+
+  async upload(): Promise<DocumentMetadata> {
+    throw new Error(this.reason);
+  }
+  async download(): Promise<Buffer | null> {
+    return null;
+  }
+  async delete(): Promise<boolean> {
+    return false;
+  }
+  async getMetadata(): Promise<DocumentMetadata | null> {
+    return null;
+  }
+  async getSignedUrl(): Promise<string | null> {
+    return null;
+  }
+}
+
 function resolveDocumentStorageProvider(): DocumentStorageProvider {
+  const isProduction = process.env.NODE_ENV === "production";
+
   // Activé UNIQUEMENT si STORAGE_PROVIDER="r2" et les 4 identifiants
   // R2 sont tous réellement renseignés (voir ACADIA_STORAGE_SETUP.md).
-  // Sans cela, on retombe silencieusement sur le stockage local de
-  // développement — jamais une fausse promesse de stockage cloud.
   if (process.env.STORAGE_PROVIDER === "r2") {
     const accountId = process.env.STORAGE_R2_ACCOUNT_ID;
     const bucket = process.env.STORAGE_BUCKET;
@@ -108,8 +140,19 @@ function resolveDocumentStorageProvider(): DocumentStorageProvider {
       return new R2DocumentStorageProvider({ accountId, bucket, accessKeyId, secretAccessKey });
     }
 
-    console.error(
-      "[ACADIA] STORAGE_PROVIDER=\"r2\" mais un ou plusieurs identifiants R2 manquent (STORAGE_R2_ACCOUNT_ID/STORAGE_BUCKET/STORAGE_ACCESS_KEY_ID/STORAGE_SECRET_ACCESS_KEY) — repli sur le stockage local de développement."
+    const reason =
+      "[ACADIA] STORAGE_PROVIDER=\"r2\" mais un ou plusieurs identifiants R2 manquent (STORAGE_R2_ACCOUNT_ID/STORAGE_BUCKET/STORAGE_ACCESS_KEY_ID/STORAGE_SECRET_ACCESS_KEY).";
+    console.error(reason + (isProduction ? " Téléversement désactivé en production (jamais de repli silencieux sur disque local)." : " Repli sur le stockage local de développement."));
+
+    if (isProduction) {
+      return new MisconfiguredDocumentStorageProvider(
+        "Le stockage persistant (Cloudflare R2) est activé mais mal configuré — le téléversement de documents est indisponible tant que les identifiants R2 ne sont pas complétés."
+      );
+    }
+  } else if (isProduction) {
+    console.error("[ACADIA] Aucun stockage persistant configuré en production (STORAGE_PROVIDER doit valoir \"r2\"). Téléversement désactivé (jamais de repli silencieux sur disque local).");
+    return new MisconfiguredDocumentStorageProvider(
+      "Aucun stockage persistant n'est configuré pour cet environnement de production — le téléversement de documents est indisponible."
     );
   }
 

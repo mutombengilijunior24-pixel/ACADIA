@@ -8,6 +8,7 @@
 // ============================================================
 
 import { getSurveyByPublicId } from "@/lib/server/survey/SurveyStore";
+import { trackProductEvent } from "@/lib/server/analytics/ProductEvents";
 
 export const runtime = "nodejs";
 
@@ -23,6 +24,8 @@ export async function GET(_request: Request, context: { params: Promise<{ public
       { status: 410 }
     );
   }
+
+  await trackProductEvent({ eventType: "PUBLIC_SURVEY_OPENED", projectId: survey.id });
 
   return Response.json(
     {

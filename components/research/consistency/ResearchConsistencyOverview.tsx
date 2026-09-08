@@ -11,6 +11,7 @@ import type { ResearchProject } from "@/lib/core/research/ResearchTypes";
 import { useResearch } from "@/contexts/ResearchContext";
 import TheoreticalFrameworkSection from "./TheoreticalFrameworkSection";
 import HypothesisStructureSection from "./HypothesisStructureSection";
+import VariableValidationSection from "./VariableValidationSection";
 import ScientificChainStrip from "./ScientificChainStrip";
 
 interface ResearchConsistencyOverviewProps {
@@ -140,67 +141,7 @@ export default function ResearchConsistencyOverview({
       {/* OPÉRATIONNALISATION */}
       {/* ================================================= */}
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <p className="text-xs font-bold tracking-wider text-acadia-blue uppercase">
-          Opérationnalisation
-        </p>
-        <h2 className="mt-1 text-lg font-bold text-acadia-navy">
-          Variables → dimensions → indicateurs → mesures
-        </h2>
-
-        {project.variables.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-400 italic">
-            Aucune variable identifiée pour le moment.
-          </p>
-        ) : (
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            {project.variables.map((variable) => {
-              const dimensionCount = variable.dimensions?.length ?? 0;
-              const indicatorCount =
-                (variable.indicators?.length ?? 0) +
-                (variable.dimensions ?? []).reduce(
-                  (sum, d) => sum + (d.indicators?.length ?? 0),
-                  0
-                );
-              const measuredCount = (variable.dimensions ?? []).reduce(
-                (sum, d) =>
-                  sum + (d.indicators ?? []).filter((i) => Boolean(i.measurementType)).length,
-                0
-              );
-
-              return (
-                <div
-                  key={variable.id}
-                  className="rounded-2xl border border-slate-200/90 bg-slate-50/60 p-4"
-                >
-                  <p className="text-2xs font-bold tracking-wider text-slate-400 uppercase">
-                    Variable ({variable.role})
-                  </p>
-                  <p className="mt-0.5 text-sm font-semibold text-acadia-navy">
-                    {variable.name}
-                  </p>
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                    <div>
-                      <p className="text-lg font-extrabold text-acadia-blue">{dimensionCount}</p>
-                      <p className="text-2xs text-slate-500">Dimensions</p>
-                    </div>
-                    <div>
-                      <p className="text-lg font-extrabold text-acadia-blue">{indicatorCount}</p>
-                      <p className="text-2xs text-slate-500">Indicateurs</p>
-                    </div>
-                    <div>
-                      <p className="text-lg font-extrabold text-acadia-blue">
-                        {measuredCount} / {indicatorCount || 0}
-                      </p>
-                      <p className="text-2xs text-slate-500">Mesures</p>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
+      <VariableValidationSection project={project} />
 
       {/* ================================================= */}
       {/* COHÉRENCE SCIENTIFIQUE */}

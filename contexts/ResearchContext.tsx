@@ -32,6 +32,7 @@ import {
 } from "react";
 
 import { useAuth } from "@/contexts/AuthContext";
+import { trackClientEvent } from "@/lib/client/trackEvent";
 
 import type {
   Research,
@@ -45,6 +46,7 @@ import {
 import type {
   ResearchProject,
   ResearchHypothesis,
+  ResearchVariable,
   ProposalStatus,
 } from "@/lib/core/research/ResearchTypes";
 
@@ -494,6 +496,16 @@ type ResearchContextType = {
 
   updateHypothesisStatement:
     (id: string, hypothesisId: string, statement: string) => void;
+
+  // ----------------------------------------------------------
+  // VALIDATION HUMAINE DES VARIABLES (A2)
+  // ----------------------------------------------------------
+
+  updateVariableStatus:
+    (id: string, variableId: string, status: ProposalStatus) => void;
+
+  updateVariableName:
+    (id: string, variableId: string, name: string) => void;
 
   // ----------------------------------------------------------
   // INSTRUMENT DE COLLECTE (P4)
@@ -1509,6 +1521,8 @@ export function ResearchProvider({
             : project
       );
     }
+
+    trackClientEvent("METHODOLOGY_COMPLETED", { projectId: id });
   }
 
 
@@ -1636,6 +1650,93 @@ export function ResearchProvider({
         (project) =>
           project
             ? { ...project, hypotheses: applyStatement(project.hypotheses), updatedAt: new Date() }
+            : project
+      );
+    }
+  }
+
+  // Validation humaine des variables A2 (accepter/rejeter) — même
+  // patron que updateHypothesisStatus : une variable rejetée par le
+  // chercheur reste en base (traçabilité) mais n'est plus affichée
+  // ni utilisée en aval (méthodologie, hypothèses, questionnaire).
+  function updateVariableStatus(
+    id: string,
+    variableId: string,
+    status: ProposalStatus
+  ) {
+
+    function applyStatus(variables: ResearchVariable[]): ResearchVariable[] {
+      return variables.map((v) => (v.id === variableId ? { ...v, status } : v));
+    }
+
+    setProjects(
+      (previous) => {
+
+        const existing = previous[id];
+
+        if (!existing) {
+          return previous;
+        }
+
+        return {
+          ...previous,
+          [id]: {
+            ...existing,
+            variables: applyStatus(existing.variables),
+            updatedAt: new Date(),
+          },
+        };
+      }
+    );
+
+    if (currentProject?.id === id) {
+      setCurrentProject(
+        (project) =>
+          project
+            ? { ...project, variables: applyStatus(project.variables), updatedAt: new Date() }
+            : project
+      );
+    }
+  }
+
+  // Permet au chercheur de corriger le nom d'une variable proposée
+  // par ACADIA sans devoir la rejeter puis en ajouter une nouvelle —
+  // même patron que updateHypothesisStatement.
+  function updateVariableName(
+    id: string,
+    variableId: string,
+    name: string
+  ) {
+
+    function applyName(variables: ResearchVariable[]): ResearchVariable[] {
+      return variables.map((v) => (v.id === variableId ? { ...v, name } : v));
+    }
+
+    setProjects(
+      (previous) => {
+
+        const existing = previous[id];
+
+        if (!existing) {
+          return previous;
+        }
+
+        return {
+          ...previous,
+          [id]: {
+            ...existing,
+            variables: applyName(existing.variables),
+            updatedAt: new Date(),
+          },
+        };
+      }
+    );
+
+    if (currentProject?.id === id) {
+      setCurrentProject(
+        (project) =>
+          project
+            ? { ...project, variables: applyName(project.variables), updatedAt: new Date() }
             : project
       );
     }
@@ -2438,6 +2539,8 @@ export function ResearchProvider({
 
         updateHypothesisStatus,
         updateHypothesisStatement,
+        updateVariableStatus,
+        updateVariableName,
 
         instruments,
 

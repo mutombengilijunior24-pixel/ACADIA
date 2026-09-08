@@ -11,6 +11,7 @@
 import { getSessionUser, unauthorized, forbidden, notFound } from "@/lib/supervision/apiAuth";
 import { getSurveyById, replaceSurveyQuestions } from "@/lib/server/survey/SurveyStore";
 import { controlQuestionnaireQuality } from "@/lib/core/survey/SurveyQualityControl";
+import { trackProductEvent } from "@/lib/server/analytics/ProductEvents";
 import type { SurveyQuestionType } from "@/lib/core/survey/SurveyTypes";
 
 export const runtime = "nodejs";
@@ -59,5 +60,8 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
   const qualityControl = controlQuestionnaireQuality(body.questions, { objective: existing.objective, problem: existing.problem });
 
   const survey = await replaceSurveyQuestions(id, qualityControl.questions);
+
+  await trackProductEvent({ userId: user.id, eventType: "QUESTIONNAIRE_EDITED", projectId: id, metadata: { questionCount: qualityControl.questions.length } });
+
   return Response.json({ survey, warnings: qualityControl.warnings }, { status: 200 });
 }

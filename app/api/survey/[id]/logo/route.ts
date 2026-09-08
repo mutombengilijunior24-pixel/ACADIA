@@ -50,7 +50,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     return Response.json({ error: "Format non pris en charge. Utilisez PNG, JPG ou WEBP." }, { status: 400 });
   }
 
-  const doc = await documentStorageProvider.upload({ fileName: file.name || "logo", contentType: realContentType, data });
+  let doc;
+  try {
+    doc = await documentStorageProvider.upload({ fileName: file.name || "logo", contentType: realContentType, data });
+  } catch (error) {
+    console.error("[ACADIA] Échec du téléversement du logo :", error instanceof Error ? error.message : error);
+    return Response.json({ error: "Le stockage de fichiers n'est pas disponible pour le moment. Réessayez plus tard." }, { status: 503 });
+  }
 
   const previousLogoId = existing.institutionLogoUrl?.split("/").pop();
 

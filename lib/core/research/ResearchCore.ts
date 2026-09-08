@@ -822,7 +822,7 @@ export function getResearchCoreWarnings(
     project.researchQuestions.length === 0
   ) {
     warnings.push(
-      "Les questions de recherche doivent encore être formulées."
+      "Aucune question de recherche n'a été reconnue : l'exposé du problème doit se terminer par un point d'interrogation (?) pour être retenu comme question de recherche principale."
     );
   }
 

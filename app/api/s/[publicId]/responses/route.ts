@@ -11,6 +11,8 @@
 import { getSurveyByPublicId, submitSurveyResponse, hasRespondentAlreadyAnswered } from "@/lib/server/survey/SurveyStore";
 import { rateLimiter, rateLimitKey } from "@/lib/server/security/RateLimiter";
 import { logAudit } from "@/lib/server/audit/AuditLog";
+import { trackProductEvent } from "@/lib/server/analytics/ProductEvents";
+import { prisma } from "@/lib/server/db/prisma";
 import { withTransientRetry } from "@/lib/server/db/retryTransient";
 import { randomUUID } from "node:crypto";
 import { cookies } from "next/headers";
@@ -129,7 +131,24 @@ async function handlePost(request: Request, context: { params: Promise<{ publicI
   });
 
   if (!created.alreadySubmitted) {
+    // Compté AVANT l'écriture de l'audit ci-dessous : si le compte est
+    // 0 à cet instant, la réponse qu'on vient d'accepter est bien la
+    // première pour cette enquête — jalon produit distinct du simple
+    // décompte de réponses (voir mission §2).
+    const priorResponseCount = await prisma.auditLog.count({ where: { action: "SURVEY_RESPONSE_RECEIVED", entityId: survey.id } });
+
     await logAudit({ actorId: undefined, action: "SURVEY_RESPONSE_RECEIVED", entityType: "Survey", entityId: survey.id });
+
+    // Le répondant anonyme n'a pas de userId — la réussite de CETTE
+    // requête serveur EST le moment réel où sa participation se termine
+    // (l'écran de confirmation ne s'affiche qu'après ce succès) : la
+    // tracker ici évite un aller-retour client supplémentaire inutile
+    // (mission §19) tout en restant fidèle au moment réel.
+    await trackProductEvent({ eventType: "PUBLIC_SURVEY_COMPLETED", projectId: survey.id });
+
+    if (priorResponseCount === 0) {
+      await trackProductEvent({ userId: survey.ownerId, eventType: "FIRST_SURVEY_RESPONSE_RECEIVED", projectId: survey.id });
+    }
   }
 
   const response = Response.json({ ok: true, responseId: created.id }, { status: 201 });

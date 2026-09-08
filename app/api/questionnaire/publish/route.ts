@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
+import { getSessionUser, unauthorized } from "@/lib/supervision/apiAuth";
 
 export async function POST(request: Request) {
+  const user = await getSessionUser();
+  if (!user) return unauthorized();
+
   try {
     const body = await request.json().catch(() => ({}));
 

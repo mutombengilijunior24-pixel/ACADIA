@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
+import FeedbackWidget from "@/components/product/FeedbackWidget";
 
 type MainLayoutProps = {
   children: ReactNode;
@@ -29,6 +30,8 @@ export default function MainLayout({ children }: MainLayoutProps) {
           {children}
         </main>
       </div>
+
+      <FeedbackWidget />
     </div>
   );
 }

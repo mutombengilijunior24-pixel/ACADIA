@@ -12,6 +12,7 @@ import {
   UserCircle2,
   X,
   GraduationCap,
+  BarChart3,
 } from "lucide-react";
 import Logo from "@/components/shared/Logo";
 import { useAuth } from "@/contexts/AuthContext";
@@ -28,10 +29,11 @@ export default function Sidebar({ mobileOpen = false, onClose }: { mobileOpen?: 
   const router = useRouter();
   const { user, logout } = useAuth();
 
-  const items =
-    user?.role === "supervisor"
-      ? [...menuItems, { title: "Espace directeur", href: "/dashboard/supervisor", icon: GraduationCap }]
-      : menuItems;
+  const items = [
+    ...menuItems,
+    ...(user?.role === "supervisor" ? [{ title: "Espace directeur", href: "/dashboard/supervisor", icon: GraduationCap }] : []),
+    ...(user?.role === "admin" ? [{ title: "Produit", href: "/dashboard/admin/product", icon: BarChart3 }] : []),
+  ];
 
   async function handleLogout() {
     await logout();

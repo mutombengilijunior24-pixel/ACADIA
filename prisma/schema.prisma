@@ -62,6 +62,11 @@ model User {
   // Module Survey (additif, indépendant de Research) — voir plus bas.
   surveysOwned         Survey[]                 @relation("SurveyOwner")
 
+  // Feedback produit (Bloc 2) — voir plus haut, distinct de FeedbackEntry.
+  productFeedback  ProductFeedback[] @relation("ProductFeedbackUser")
+  bugReports       BugReport[]       @relation("BugReportUser")
+  featureRequests  FeatureRequest[]  @relation("FeatureRequestUser")
+
   @@index([role])
 }
 
@@ -343,6 +348,84 @@ model AuditLog {
 
   @@index([actorId])
   @@index([action])
+}
+
+// ------------------------------------------------------------
+// FEEDBACK PRODUIT / SIGNALEMENT DE BUG / DEMANDE DE FONCTIONNALITÉ
+// (Bloc 2 — préparation bêta "100 étudiants", 08/09/2026)
+//
+// Distinct de FeedbackEntry (évaluation académique superviseur →
+// étudiant, voir plus bas) : ceci est le retour PRODUIT envoyé par
+// les utilisateurs eux-mêmes sur ACADIA. Un seul widget de saisie
+// (voir app/api/product/feedback/route.ts) route vers l'une de ces
+// trois tables selon le type choisi par l'utilisateur — jamais un
+// quatrième système parallèle : les événements de parcours réutilisent
+// AuditLog tel quel (voir lib/server/analytics/ProductEvents.ts).
+//
+// `projectId` reste un identifiant libre (pas de relation Prisma) —
+// il peut désigner un ResearchProject OU un Survey selon le contexte
+// d'origine, deux tables distinctes dans ce schéma ; même choix que
+// AuditLog.entityId, déjà établi pour cette raison.
+// ------------------------------------------------------------
+
+model ProductFeedback {
+  id        String   @id @default(cuid())
+  userId    String
+  projectId String?
+  type      String // "question" | "satisfaction"
+  message   String
+  page      String?
+  step      String?
+  category  String? // UX | SCIENTIFIC | QUESTIONNAIRE | DATA | ANALYSIS | PERFORMANCE | TECHNICAL | PAYMENT | OTHER
+  createdAt DateTime @default(now())
+
+  user User @relation("ProductFeedbackUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model BugReport {
+  id          String    @id @default(cuid())
+  userId      String
+  projectId   String?
+  page        String
+  step        String?
+  description String
+  severity    String // LOW | MEDIUM | HIGH | BLOCKER
+  category    String?
+  status      String    @default("OPEN") // OPEN | IN_REVIEW | RESOLVED | CLOSED
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  resolvedAt  DateTime?
+  resolvedBy  String?
+
+  user User @relation("BugReportUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([severity])
+  @@index([createdAt])
+}
+
+model FeatureRequest {
+  id          String   @id @default(cuid())
+  userId      String
+  projectId   String?
+  title       String
+  description String
+  page        String?
+  category    String?
+  status      String   @default("SUBMITTED") // SUBMITTED | REVIEWING | PLANNED | IN_PROGRESS | DONE | DECLINED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation("FeatureRequestUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 // ============================================================

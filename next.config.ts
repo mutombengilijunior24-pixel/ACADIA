@@ -26,6 +26,17 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+
+  // La police PDF embarquée (app/api/export/pdf/fonts/*.ttf) est lue
+  // via un chemin construit à l'exécution (path.join(process.cwd(), ...))
+  // — non détectable statiquement par le traceur de fichiers Vercel.
+  // Sans cette inclusion explicite, les .ttf ne seraient pas inclus
+  // dans le bundle de la fonction serverless et le rendu PDF en
+  // production retomberait silencieusement sur la police PDF standard
+  // (sans support grec/mathématique) — voir audit "100 étudiants".
+  outputFileTracingIncludes: {
+    "/api/export/pdf": ["./app/api/export/pdf/fonts/**/*"],
+  },
 };
 
 export default nextConfig;

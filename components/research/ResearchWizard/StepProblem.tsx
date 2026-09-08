@@ -25,9 +25,23 @@ export default function StepProblem() {
         rows={6}
         value={currentResearch.problem}
         onChange={(value) => updateCurrentResearch("problem", value)}
-        placeholder="Décrivez ici le constat pratique ou théorique (ex: Malgré les investissements récents dans les outils numériques, le taux d'adoption par les équipes opérationnelles reste inférieur à 35%...)"
+        placeholder="Décrivez le constat, puis terminez par votre question de recherche (ex: Malgré les investissements récents dans les outils numériques, le taux d'adoption par les équipes opérationnelles reste inférieur à 35%. Dans quelle mesure ces investissements expliquent-ils ce faible taux d'adoption ?)"
         savedLabel="Problématique enregistrée"
       />
+
+      {currentResearch.problem.trim().length > 0 && (
+        currentResearch.problem.trim().endsWith("?") ? (
+          <p className="text-xs sm:text-sm text-emerald-700 flex items-center gap-2">
+            <span className="font-bold">✓</span>
+            <span>Votre texte se termine par une question — il sera retenu comme question de recherche principale.</span>
+          </p>
+        ) : (
+          <p className="text-xs sm:text-sm text-amber-700 flex items-center gap-2">
+            <span className="font-bold">!</span>
+            <span>ACADIA ne reformule jamais votre texte : pour qu&apos;une question de recherche soit reconnue, terminez votre exposé par une phrase interrogative se terminant par « ? ».</span>
+          </p>
+        )
+      )}
 
       {/* Guide méthodologique d'aide */}
       <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4 sm:p-5 space-y-3">
@@ -42,11 +56,11 @@ export default function StepProblem() {
           </li>
           <li className="flex items-start gap-2">
             <span className="font-bold text-acadia-blue">•</span>
-            <span><strong>L'intérêt scientifique :</strong> Pourquoi est-il crucial de chercher à comprendre ou résoudre ce phénomène ?</span>
+            <span><strong>L&apos;intérêt scientifique :</strong> Pourquoi est-il crucial de chercher à comprendre ou résoudre ce phénomène ?</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="font-bold text-acadia-blue">•</span>
-            <span><strong>La question centrale :</strong> En quoi cette étude apporte-t-elle un éclairage nouveau ?</span>
+            <span><strong>La question centrale, à formuler explicitement :</strong> terminez votre texte par une vraie question (« Dans quelle mesure... ? », « Comment... ? », « Pourquoi... ? ») — c&apos;est cette phrase, telle quelle, qui devient votre question de recherche.</span>
           </li>
         </ul>
       </div>

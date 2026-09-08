@@ -27,6 +27,7 @@ import {
   convertMillimetersToTwip,
 } from "docx";
 import type { DocumentModel, DocumentChapterModel } from "@/lib/core/export/DocumentTypes";
+import { getSessionUser, unauthorized } from "@/lib/supervision/apiAuth";
 
 export const runtime = "nodejs";
 
@@ -145,6 +146,9 @@ function renderChapter(chapter: DocumentChapterModel, model: DocumentModel): (Pa
 }
 
 export async function POST(request: Request) {
+  const user = await getSessionUser();
+  if (!user) return unauthorized();
+
   let model: DocumentModel;
   try {
     model = (await request.json()) as DocumentModel;

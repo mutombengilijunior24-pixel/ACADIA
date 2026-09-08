@@ -9,6 +9,7 @@ import { createSessionToken, SESSION_COOKIE_MAX_AGE_SECONDS, SESSION_COOKIE_NAME
 import { toPublicUser } from "@/lib/auth/AuthTypes";
 import { rateLimiter, rateLimitKey } from "@/lib/server/security/RateLimiter";
 import { logAudit } from "@/lib/server/audit/AuditLog";
+import { trackProductEvent } from "@/lib/server/analytics/ProductEvents";
 
 export const runtime = "nodejs";
 
@@ -50,6 +51,8 @@ export async function POST(request: Request) {
     path: "/",
     maxAge: SESSION_COOKIE_MAX_AGE_SECONDS,
   });
+
+  await trackProductEvent({ userId: user.id, eventType: "AUTH_LOGIN" });
 
   return Response.json({ user: toPublicUser(user) }, { status: 200 });
 }
