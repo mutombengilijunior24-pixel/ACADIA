@@ -1,5 +1,6 @@
-import { openai } from "./client";
-import { AI_MODEL } from "./config";
+import { createTrackedResponse } from "./trackedResponses";
+import { selectModel } from "@/lib/server/ai/ModelRouter";
+import type { AITrackingInput } from "./SubjectUnderstandingAI";
 import type { ScientificInterpretationContext } from "./ScientificInterpretationAI";
 
 // ============================================================
@@ -89,10 +90,12 @@ Réponds exclusivement en français, dans un registre professionnel et académiq
 
 export async function interpretScientificConclusion(
   statisticalContext: ScientificInterpretationContext,
-  source: ScientificConclusionSourceContent
+  source: ScientificConclusionSourceContent,
+  tracking: AITrackingInput = {}
 ): Promise<ScientificConclusionAIResult> {
-  const response = await openai.responses.create({
-    model: AI_MODEL,
+  const { model } = selectModel("CONCLUSION");
+  const response = await createTrackedResponse({
+    model,
     input: [
       { role: "system", content: SYSTEM_PROMPT },
       {
@@ -114,6 +117,11 @@ ${JSON.stringify(source, null, 2)}`,
         schema: RESULT_SCHEMA,
       },
     },
+  }, {
+    operation: "CONCLUSION",
+    userId: tracking.userId,
+    projectId: tracking.projectId,
+    correlationId: tracking.correlationId,
   });
 
   const content = response.output_text;

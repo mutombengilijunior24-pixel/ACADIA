@@ -1,4 +1,5 @@
 import { Calculator, FlaskConical, LineChart, ShieldCheck } from "lucide-react";
+import Reveal from "./Reveal";
 
 // ============================================================
 // P13 — Section "Le cerveau ACADIA" : montrer qu'ACADIA n'est pas
@@ -35,7 +36,7 @@ export default function AcadiaBrain() {
   return (
     <section className="bg-acadia-navy py-28 text-white">
       <div className="mx-auto max-w-7xl px-6">
-        <div className="mx-auto max-w-3xl text-center">
+        <Reveal className="mx-auto max-w-3xl text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.3em] text-acadia-blue-light">Le cerveau ACADIA</p>
           <h2 className="mt-4 text-4xl font-bold lg:text-5xl">ACADIA ne se contente pas de générer du texte.</h2>
           <p className="mt-6 text-lg leading-8 text-slate-300">
@@ -43,24 +44,28 @@ export default function AcadiaBrain() {
             cohérence structurelle. L&apos;IA intervient uniquement lorsque son apport est utile : comprendre,
             reformuler, analyser un texte. Jamais pour inventer un résultat.
           </p>
-        </div>
+        </Reveal>
 
         <div className="mt-16 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {PILLARS.map((pillar) => (
-            <div key={pillar.title} className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
+          {PILLARS.map((pillar, index) => (
+            <Reveal key={pillar.title} delayMs={(index % 4) * 100}>
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm transition hover:-translate-y-1 hover:bg-white/[0.07]">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-acadia-blue/20 text-acadia-blue-light">
                 <pillar.icon className="h-5 w-5" />
               </div>
               <h3 className="mt-4 text-base font-bold">{pillar.title}</h3>
               <p className="mt-2 text-sm leading-6 text-slate-300">{pillar.description}</p>
             </div>
+            </Reveal>
           ))}
         </div>
 
-        <p className="mx-auto mt-14 max-w-2xl text-center text-sm font-semibold text-acadia-blue-light">
-          Positionnement ACADIA : un environnement de recherche assisté par IA — jamais une intelligence autonome
-          qui remplace le chercheur. Le chercheur reste décisionnaire.
-        </p>
+        <Reveal>
+          <p className="mx-auto mt-14 max-w-2xl text-center text-sm font-semibold text-acadia-blue-light">
+            Positionnement ACADIA : un environnement de recherche assisté par IA — jamais une intelligence autonome
+            qui remplace le chercheur. Le chercheur reste décisionnaire.
+          </p>
+        </Reveal>
       </div>
     </section>
   );

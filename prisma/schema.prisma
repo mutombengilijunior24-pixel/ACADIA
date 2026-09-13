@@ -26,6 +26,7 @@ datasource db {
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
+
 // ------------------------------------------------------------
 // AUTHENTIFICATION / COMPTE
 // ------------------------------------------------------------
@@ -43,35 +44,35 @@ model User {
   updatedAt    DateTime  @updatedAt
   lastLoginAt  DateTime?
 
-  studentProfile   StudentProfile?
+  studentProfile    StudentProfile?
   supervisorProfile SupervisorProfile?
-  resetTokens      PasswordResetToken[]
-  researchProjects ResearchProject[]        @relation("ResearchOwner")
+  resetTokens       PasswordResetToken[]
+  researchProjects  ResearchProject[]    @relation("ResearchOwner")
 
-  canevasList          SupervisionCanevas[]     @relation("CanevasSupervisor")
-  invitationsSent      SupervisorInvitation[]   @relation("InvitationSupervisor")
-  assignmentsAsStudent SupervisionAssignment[]  @relation("AssignmentStudent")
+  canevasList             SupervisionCanevas[]    @relation("CanevasSupervisor")
+  invitationsSent         SupervisorInvitation[]  @relation("InvitationSupervisor")
+  assignmentsAsStudent    SupervisionAssignment[] @relation("AssignmentStudent")
   assignmentsAsSupervisor SupervisionAssignment[] @relation("AssignmentSupervisor")
-  submissionsAsStudent    Submission[]          @relation("SubmissionStudent")
-  submissionsAsSupervisor Submission[]          @relation("SubmissionSupervisor")
-  messagesSent         InboxMessage[]           @relation("MessageSender")
-  messagesReceived     InboxMessage[]           @relation("MessageRecipient")
-  feedbackGiven        FeedbackEntry[]          @relation("FeedbackSupervisor")
-  notifications        Notification[]           @relation("NotificationUser")
+  submissionsAsStudent    Submission[]            @relation("SubmissionStudent")
+  submissionsAsSupervisor Submission[]            @relation("SubmissionSupervisor")
+  messagesSent            InboxMessage[]          @relation("MessageSender")
+  messagesReceived        InboxMessage[]          @relation("MessageRecipient")
+  feedbackGiven           FeedbackEntry[]         @relation("FeedbackSupervisor")
+  notifications           Notification[]          @relation("NotificationUser")
 
   // Module Survey (additif, indépendant de Research) — voir plus bas.
-  surveysOwned         Survey[]                 @relation("SurveyOwner")
+  surveysOwned Survey[] @relation("SurveyOwner")
 
   // Feedback produit (Bloc 2) — voir plus haut, distinct de FeedbackEntry.
-  productFeedback  ProductFeedback[] @relation("ProductFeedbackUser")
-  bugReports       BugReport[]       @relation("BugReportUser")
-  featureRequests  FeatureRequest[]  @relation("FeatureRequestUser")
+  productFeedback ProductFeedback[] @relation("ProductFeedbackUser")
+  bugReports      BugReport[]       @relation("BugReportUser")
+  featureRequests FeatureRequest[]  @relation("FeatureRequestUser")
 
   @@index([role])
 }
 
 model StudentProfile {
-  userId      String  @id
+  userId      String   @id
   studyLevel  String?
   program     String?
   institution String?
@@ -85,22 +86,22 @@ model StudentProfile {
 }
 
 model SupervisorProfile {
-  userId              String   @id
-  fullName            String
-  academicTitle       String?
-  institution         String?
-  faculty             String?
-  department          String?
-  domain              String?
-  specialties         String? // liste séparée par virgules — pas de tableau natif SQLite
-  activeAcademicYear  String?
-  isActive            Boolean  @default(true)
-  professionalEmail   String?
-  signature           String?
-  activeCanevasId     String?
-  verificationStatus  String   @default("pending") // pending | verified | rejected
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  userId             String   @id
+  fullName           String
+  academicTitle      String?
+  institution        String?
+  faculty            String?
+  department         String?
+  domain             String?
+  specialties        String? // liste séparée par virgules — pas de tableau natif SQLite
+  activeAcademicYear String?
+  isActive           Boolean  @default(true)
+  professionalEmail  String?
+  signature          String?
+  activeCanevasId    String?
+  verificationStatus String   @default("pending") // pending | verified | rejected
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -139,14 +140,14 @@ model ResearchProject {
   university           String?
   location             String?
   description          String?
-  researchData         String   // JSON (Research/ResearchData)
-  payload              String   // JSON (ResearchProject scientifique complet)
-  instrument           String?  // JSON (InstrumentRecord)
-  dataset              String?  // JSON (Dataset)
-  annotations          String?  // JSON (Record<blockId, AnnotationRecord>)
-  bibliography         String?  // JSON (BibliographyReference[])
-  theoreticalFramework String?  // JSON (TheoreticalFrameworkEntry[])
-  exportHistory        String?  // JSON (ExportHistoryEntry[])
+  researchData         String // JSON (Research/ResearchData)
+  payload              String // JSON (ResearchProject scientifique complet)
+  instrument           String? // JSON (InstrumentRecord)
+  dataset              String? // JSON (Dataset)
+  annotations          String? // JSON (Record<blockId, AnnotationRecord>)
+  bibliography         String? // JSON (BibliographyReference[])
+  theoreticalFramework String? // JSON (TheoreticalFrameworkEntry[])
+  exportHistory        String? // JSON (ExportHistoryEntry[])
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
@@ -160,17 +161,17 @@ model ResearchProject {
 // ------------------------------------------------------------
 
 model SupervisionCanevas {
-  id               String   @id @default(cuid())
-  supervisorId     String
-  academicYear     String
-  faculty          String?
-  department       String?
-  workTypes        String   // JSON string[]
-  steps            String   // JSON CanevasStep[]
-  hypothesisRules  String?  // JSON HypothesisCountRule[]
-  isActive         Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id              String   @id @default(cuid())
+  supervisorId    String
+  academicYear    String
+  faculty         String?
+  department      String?
+  workTypes       String // JSON string[]
+  steps           String // JSON CanevasStep[]
+  hypothesisRules String? // JSON HypothesisCountRule[]
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   supervisor User @relation("CanevasSupervisor", fields: [supervisorId], references: [id], onDelete: Cascade)
 
@@ -178,16 +179,16 @@ model SupervisionCanevas {
 }
 
 model SupervisorInvitation {
-  id            String    @id @default(cuid())
-  code          String    @unique
-  supervisorId  String
-  studentEmail  String?
-  researchId    String?
-  status        String    @default("pending") // pending | accepted | expired | revoked
-  createdAt     DateTime  @default(now())
-  expiresAt     DateTime
-  usedAt        DateTime?
-  studentId     String?
+  id           String    @id @default(cuid())
+  code         String    @unique
+  supervisorId String
+  studentEmail String?
+  researchId   String?
+  status       String    @default("pending") // pending | accepted | expired | revoked
+  createdAt    DateTime  @default(now())
+  expiresAt    DateTime
+  usedAt       DateTime?
+  studentId    String?
 
   supervisor User @relation("InvitationSupervisor", fields: [supervisorId], references: [id], onDelete: Cascade)
 
@@ -224,7 +225,7 @@ model Submission {
   studentId            String
   supervisorId         String
   version              Int
-  snapshot             String    // JSON SubmissionSnapshot (project + instrument + theoreticalFramework)
+  snapshot             String // JSON SubmissionSnapshot (project + instrument + theoreticalFramework)
   submittedAt          DateTime  @default(now())
   status               String    @default("submitted")
   studentMessage       String?
@@ -250,7 +251,7 @@ model InboxMessage {
   submissionId String?
   subject      String
   body         String
-  type         String    // feedback | correction | notification | validation | system
+  type         String // feedback | correction | notification | validation | system
   createdAt    DateTime  @default(now())
   readAt       DateTime?
   priority     String    @default("normal")
@@ -262,13 +263,13 @@ model InboxMessage {
 }
 
 model FeedbackEntry {
-  id                String   @id @default(cuid())
-  submissionId      String
-  supervisorId      String
-  globalEvaluation  String
-  sections          String   // JSON FeedbackSectionEntry[]
-  createdAt         DateTime @default(now())
-  sentAt            DateTime?
+  id               String    @id @default(cuid())
+  submissionId     String
+  supervisorId     String
+  globalEvaluation String
+  sections         String // JSON FeedbackSectionEntry[]
+  createdAt        DateTime  @default(now())
+  sentAt           DateTime?
 
   supervisor User @relation("FeedbackSupervisor", fields: [supervisorId], references: [id], onDelete: Cascade)
 
@@ -291,18 +292,18 @@ model Correction {
 }
 
 model SupervisorBrief {
-  id                String   @id @default(cuid())
-  submissionId      String
-  generatedAt       DateTime @default(now())
-  generatedBy       String   @default("acadia")
-  status            String   @default("generated")
-  overallState      String
-  strengths         String   // JSON string[]
-  inconsistencies   String   // JSON string[]
-  incompleteSections String  // JSON string[]
-  importantQuestions String  // JSON string[]
-  progressPercent   Int
-  disclaimer        String
+  id                 String   @id @default(cuid())
+  submissionId       String
+  generatedAt        DateTime @default(now())
+  generatedBy        String   @default("acadia")
+  status             String   @default("generated")
+  overallState       String
+  strengths          String // JSON string[]
+  inconsistencies    String // JSON string[]
+  incompleteSections String // JSON string[]
+  importantQuestions String // JSON string[]
+  progressPercent    Int
+  disclaimer         String
 
   @@index([submissionId])
 }
@@ -439,25 +440,25 @@ model FeatureRequest {
 // ============================================================
 
 model Survey {
-  id              String    @id @default(cuid())
-  ownerId         String
-  title           String
-  description     String?
-  objective       String?
-  problem         String?
-  targetAudience  String?
-  institution     String?
+  id                        String    @id @default(cuid())
+  ownerId                   String
+  title                     String
+  description               String?
+  objective                 String?
+  problem                   String?
+  targetAudience            String?
+  institution               String?
   institutionLogoDocumentId String?
-  status          String    @default("draft") // draft | active | suspended | closed
-  isAnonymous     Boolean   @default(false)
-  targetResponses Int?
-  startDate       DateTime?
-  endDate         DateTime?
-  publicId        String?   @unique
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  status                    String    @default("draft") // draft | active | suspended | closed
+  isAnonymous               Boolean   @default(false)
+  targetResponses           Int?
+  startDate                 DateTime?
+  endDate                   DateTime?
+  publicId                  String?   @unique
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
 
-  owner      User               @relation("SurveyOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  owner      User              @relation("SurveyOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   questions  SurveyQuestion[]
   categories SurveyCategory[]
   targets    SurveyTarget[]
@@ -490,16 +491,16 @@ model SurveyQuestion {
   surveyId              String
   section               String?
   order                 Int      @default(0)
-  type                  String   // short_text|long_text|single_choice|multiple_choice|scale|boolean|number|age|date|institution|faculty|level|category
+  type                  String // short_text|long_text|single_choice|multiple_choice|scale|boolean|number|age|date|institution|faculty|level|category
   text                  String
   required              Boolean  @default(true)
-  variable              String?  // variable méthodologique mesurée par cette question (moteur IA Survey)
-  indicator             String?  // indicateur concret rattaché à la variable (moteur IA Survey)
-  visibleForCategoryIds String?  // JSON string[] — vide/absent = visible pour toutes les catégories
+  variable              String? // variable méthodologique mesurée par cette question (moteur IA Survey)
+  indicator             String? // indicateur concret rattaché à la variable (moteur IA Survey)
+  visibleForCategoryIds String? // JSON string[] — vide/absent = visible pour toutes les catégories
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
-  survey  Survey           @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  survey  Survey         @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   options SurveyOption[]
   answers SurveyAnswer[]
 
@@ -565,14 +566,14 @@ model SurveyResponse {
   id            String    @id @default(cuid())
   surveyId      String
   categoryId    String?
-  respondentKey String?   // empreinte non identifiante (dédoublonnage optionnel), jamais une donnée personnelle
+  respondentKey String? // empreinte non identifiante (dédoublonnage optionnel), jamais une donnée personnelle
   status        String    @default("in_progress") // in_progress | completed | abandoned
   institution   String?
   faculty       String?
   level         String?
   age           Int?
   sex           String?
-  metadata      String?   // JSON — informations sociodémographiques additionnelles définies par l'enquête
+  metadata      String? // JSON — informations sociodémographiques additionnelles définies par l'enquête
   startedAt     DateTime  @default(now())
   completedAt   DateTime?
 
@@ -609,7 +610,7 @@ model SurveyAnswer {
 model SurveyEvent {
   id        String   @id @default(cuid())
   surveyId  String
-  type      String   // created | published | suspended | closed | response_received | exported
+  type      String // created | published | suspended | closed | response_received | exported
   metadata  String?
   createdAt DateTime @default(now())
 
@@ -617,4 +618,135 @@ model SurveyEvent {
 
   @@index([surveyId])
   @@index([type])
+}
+
+// ------------------------------------------------------------
+// SECURITY + AI COST FOUNDATION (mission dédiée)
+//
+// userId/projectId restent des identifiants LIBRES (pas de relation
+// Prisma) — même choix qu'AuditLog.actorId/entityId ci-dessus, pour
+// la même raison : éviter de coupler une table de suivi transverse à
+// un cycle de vie FK (cascade/suppression) qui ne la concerne pas.
+// ------------------------------------------------------------
+
+// Journal central de tout appel IA — un appel = une ligne. Jamais un
+// second système de tracking : ProductEvents (parcours produit) et
+// AuditLog (sécurité) restent inchangés et continuent d'exister pour
+// leurs usages respectifs ; AIUsageLedger est le seul endroit qui
+// connaît les tokens/coûts/latence d'un appel OpenAI donné.
+model AIUsageLedger {
+  id                 String   @id @default(cuid())
+  userId             String?
+  projectId          String?
+  anonymousSessionId String?
+  operation          String // PREVIEW_ANALYSIS | DEEP_ANALYSIS | VARIABLE_ANALYSIS | METHODOLOGY | QUESTIONNAIRE_GENERATION | DOCUMENT_ANALYSIS | INTERPRETATION | CONCLUSION | OTHER
+  model              String
+  provider           String   @default("openai")
+  inputTokens        Int?
+  cachedInputTokens  Int?
+  outputTokens       Int?
+  estimatedCostUsd   Decimal? @db.Decimal(12, 6)
+  actualCostUsd      Decimal? @db.Decimal(12, 6)
+  latencyMs          Int?
+  success            Boolean
+  cacheHit           Boolean  @default(false)
+  errorMessage       String? // message court, jamais une stack trace ni un secret
+  requestId          String? // response.id renvoyé par OpenAI
+  correlationId      String? // id généré par ACADIA, relie plusieurs appels d'une même action utilisateur
+  createdAt          DateTime @default(now())
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([anonymousSessionId])
+  @@index([operation])
+  @@index([createdAt])
+}
+
+// Compteur de quota distribué (fenêtre glissante), utilisé par
+// PostgresRateLimitStore (lib/server/security/RateLimitStore.ts) —
+// la vraie protection cross-instance en environnement serverless.
+// Le limiteur en mémoire existant (lib/server/security/RateLimiter.ts)
+// reste la couche secondaire anti-rafale (sub-seconde, par instance).
+model RateLimitCounter {
+  key         String   @id
+  count       Int      @default(0)
+  windowStart DateTime
+  updatedAt   DateTime @updatedAt
+
+  @@index([windowStart])
+}
+
+// Cache d'analyses IA GÉNÉRIQUES (jamais de données privées — voir
+// lib/server/ai/AnalysisCache.ts). Un seul type d'opération y est
+// actuellement éligible (PREVIEW_ANALYSIS : entrée = sujet seul,
+// aucune donnée de projet/document) — voir la garde explicite dans
+// le code, pas seulement une convention de nommage.
+model GenericAnalysisCache {
+  id              String   @id @default(cuid())
+  cacheKey        String   @unique
+  operation       String
+  normalizedInput String // texte normalisé, jamais une donnée personnelle
+  resultJson      String // JSON du résultat mis en cache
+  hitCount        Int      @default(0)
+  createdAt       DateTime @default(now())
+  lastHitAt       DateTime @default(now())
+
+  @@index([operation])
+}
+
+// ------------------------------------------------------------
+// CONVERSION + PAY-AS-YOU-PROGRESS (mission dédiée)
+//
+// userId/projectId restent des identifiants LIBRES (pas de relation
+// Prisma) — même choix qu'AuditLog/AIUsageLedger, pour ne pas coupler
+// une table transverse au cycle de vie FK d'un ResearchProject.
+// projectId est nullable : un entitlement PEUT être "global compte"
+// (aucun cas d'usage aujourd'hui, mais le modèle le permet sans
+// migration future — voir mission §2, "le système doit pouvoir évoluer").
+// ------------------------------------------------------------
+
+// Ce que le chercheur a réellement débloqué — une ligne = un
+// déblocage actif pour (userId, projectId, key). Jamais recalculé
+// dynamiquement depuis Payment : la vérité d'accès vit ici, Payment
+// n'est que la trace de la transaction qui a mené à ce déblocage
+// (ou "beta_free" pendant la bêta — voir PricingConfig.ts).
+model Entitlement {
+  id        String   @id @default(cuid())
+  userId    String
+  projectId String?
+  key       String // EntitlementKey : PREVIEW | RESEARCH_ANALYSIS | METHODOLOGY | QUESTIONNAIRE | DATA_ANALYSIS | INTERPRETATION | WRITING | DEFENSE
+  status    String   @default("active") // active | revoked
+  source    String // beta_free | payment | admin_grant | promo
+  paymentId String?
+  grantedAt DateTime @default(now())
+
+  @@unique([userId, projectId, key])
+  @@index([userId])
+  @@index([projectId])
+}
+
+// Trace de CHAQUE tentative de déblocage, réussie ou non — y compris
+// pendant la bêta (montant 0, provider "beta_free") : l'architecture
+// se comporte déjà comme s'il y avait un paiement réel (mission §4),
+// pour ne pas avoir à réécrire ce flux quand un vrai fournisseur de
+// paiement sera branché. idempotencyKey empêche un double paiement
+// (double clic, double soumission) de créer deux transactions.
+model Payment {
+  id             String   @id @default(cuid())
+  userId         String
+  projectId      String?
+  entitlementKey String
+  amountUsd      Decimal  @db.Decimal(10, 2)
+  currency       String   @default("USD")
+  status         String // pending | succeeded | failed
+  provider       String // beta_free | mobile_money | stripe (futurs fournisseurs réels)
+  providerRef    String? // référence externe, une fois un vrai fournisseur branché
+  idempotencyKey String   @unique
+  failureReason  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([status])
 }

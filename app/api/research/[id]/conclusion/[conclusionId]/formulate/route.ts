@@ -97,7 +97,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   };
 
   try {
-    const aiResult = await interpretScientificConclusion(aiContext, source);
+    const aiResult = await interpretScientificConclusion(aiContext, source, { userId: user.id, projectId: id });
 
     const violations = validateScientificConclusion(aiResult, conclusion, aiContext);
     if (violations.length > 0) {

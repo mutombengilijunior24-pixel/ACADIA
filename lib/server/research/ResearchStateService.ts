@@ -418,6 +418,63 @@ export async function updateScientificConclusionContent(
 }
 
 /**
+ * Ajoute une version d'analyse (mission Server Contracts & Research
+ * Persistence) à l'historique du projet — même discipline
+ * qu'appendStatisticalRunRecord/appendScientificInterpretationRecord/
+ * appendScientificConclusionRecord : n'écrase JAMAIS une version
+ * précédente, y compris déjà validée par le chercheur. Met aussi à
+ * jour understanding/variables/relations au niveau racine du projet
+ * pour rester rétrocompatible avec tout code qui les lit directement
+ * (ex. contexts/ResearchContext.tsx) — la dernière entrée de
+ * `analysisHistory` reste la seule source de vérité "actuelle".
+ */
+export async function appendResearchAnalysisVersionRecord(
+  ownerId: string,
+  id: string,
+  version: NonNullable<ScientificProject["analysisHistory"]>[number]
+): Promise<ScientificProject | null> {
+  const existing = await prisma.researchProject.findUnique({ where: { id } });
+  if (!existing || existing.ownerId !== ownerId) return null;
+
+  const project = safeParse<ScientificProject>(existing.payload, {} as ScientificProject);
+  project.analysisHistory = [...(project.analysisHistory ?? []), version];
+  project.understanding = version.understanding;
+  project.variables = version.variables;
+  project.relations = version.relations;
+
+  await prisma.researchProject.update({ where: { id }, data: { payload: JSON.stringify(project) } });
+  return project;
+}
+
+/**
+ * Applique une décision de validation humaine (generated → validated
+ * / rejected) sur UNE version déjà présente dans analysisHistory —
+ * ne modifie aucun autre champ de la version, ne touche à aucune
+ * autre version. Retourne null si le projet/la version n'existe pas
+ * ou n'appartient pas à ownerId.
+ */
+export async function updateResearchAnalysisValidationRecord(
+  ownerId: string,
+  id: string,
+  versionId: string,
+  validation: NonNullable<ScientificProject["analysisHistory"]>[number]["validation"]
+): Promise<ScientificProject | null> {
+  const existing = await prisma.researchProject.findUnique({ where: { id } });
+  if (!existing || existing.ownerId !== ownerId) return null;
+
+  const project = safeParse<ScientificProject>(existing.payload, {} as ScientificProject);
+  const history = project.analysisHistory ?? [];
+  const index = history.findIndex((v) => v.id === versionId);
+  if (index === -1) return null;
+
+  history[index] = { ...history[index], validation };
+  project.analysisHistory = history;
+
+  await prisma.researchProject.update({ where: { id }, data: { payload: JSON.stringify(project) } });
+  return project;
+}
+
+/**
  * Archive un projet (status="archived") plutôt qu'une suppression
  * réelle — cohérent avec la limite déjà assumée par ce service
  * ("ne supprime jamais une ligne", voir en-tête du fichier) et avec

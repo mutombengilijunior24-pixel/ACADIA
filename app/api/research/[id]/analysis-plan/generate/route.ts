@@ -10,6 +10,8 @@ import { getSessionUser, unauthorized, forbidden, notFound } from "@/lib/supervi
 import { getResearchProjectRecord, setAnalysisPlanRecord } from "@/lib/server/research/ResearchStateService";
 import { generateAnalysisPlan } from "@/lib/core/analysis/AnalysisPlanEngine";
 import { logAudit } from "@/lib/server/audit/AuditLog";
+import { ensureEntitlement, EntitlementRequiredError } from "@/lib/server/billing/EntitlementService";
+import { getCatalogEntry, getEffectivePriceUsd } from "@/lib/server/billing/PricingConfig";
 import type { Dataset } from "@/lib/core/dataset/DatasetTypes";
 
 export const runtime = "nodejs";
@@ -27,6 +29,23 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
   if (!record) return notFound();
   if (record.ownerId !== user.id) {
     return forbidden("Ce projet ne vous appartient pas.", { actorId: user.id, entityType: "ResearchProject", entityId: id });
+  }
+
+  // Mission Conversion + Pay-as-you-progress — "Analyse 🔒".
+  try {
+    await ensureEntitlement(user.id, id, "DATA_ANALYSIS");
+  } catch (error) {
+    if (error instanceof EntitlementRequiredError) {
+      return Response.json(
+        {
+          error: "Cette étape nécessite de débloquer « Analyse des données ».",
+          entitlementRequired: getCatalogEntry(error.key),
+          priceUsd: getEffectivePriceUsd(error.key),
+        },
+        { status: 402 }
+      );
+    }
+    throw error;
   }
 
   if (!isDataset(record.dataset)) {

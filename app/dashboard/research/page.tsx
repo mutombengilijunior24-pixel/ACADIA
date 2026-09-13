@@ -16,6 +16,7 @@ import Link from "next/link";
 import { useResearch } from "@/contexts/ResearchContext";
 import { computeResearchProgress } from "@/lib/core/dashboard/ResearchProgressEngine";
 import { FilePlus2, FolderSearch, CheckCircle2, Circle, ArrowRight } from "lucide-react";
+import PageContainer from "@/components/layout/PageContainer";
 
 export default function ResearchPage() {
   const { researches, projects, instruments, theoreticalFramework, exportHistory } = useResearch();
@@ -36,8 +37,7 @@ export default function ResearchPage() {
     .sort((a, b) => new Date(b.research.updatedAt).getTime() - new Date(a.research.updatedAt).getTime());
 
   return (
-    <main className="min-h-screen bg-slate-100 p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto max-w-5xl">
+    <PageContainer maxWidthClassName="max-w-5xl">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-wider text-acadia-blue sm:text-sm">ACADIA — Mes recherches</p>
@@ -65,8 +65,16 @@ export default function ResearchPage() {
           </div>
         ) : (
           <div className="mt-8 grid gap-5 sm:grid-cols-2">
-            {items.map(({ research, progress }) => (
-              <div key={research.id} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            {items.map(({ research, progress }, index) => {
+              // Une carte seule en fin de grille impaire restait alignée
+              // à gauche ("dans un coin") — on la centre explicitement
+              // sur les deux colonnes plutôt que de la laisser esseulée.
+              const isLastOfOddCount = items.length % 2 === 1 && index === items.length - 1;
+              return (
+              <div
+                key={research.id}
+                className={`rounded-3xl border border-slate-200 bg-white p-6 shadow-sm ${isLastOfOddCount ? "sm:col-span-2 sm:mx-auto sm:w-full sm:max-w-md" : ""}`}
+              >
                 <h2 className="text-lg font-bold text-slate-900">{research.title || "Recherche sans titre"}</h2>
                 <p className="mt-1 text-xs text-slate-400">
                   Mis à jour le {new Date(research.updatedAt).toLocaleDateString("fr-FR")}
@@ -102,10 +110,10 @@ export default function ResearchPage() {
                   Continuer <ArrowRight className="h-4 w-4" />
                 </Link>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
-      </div>
-    </main>
+    </PageContainer>
   );
 }

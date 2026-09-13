@@ -42,6 +42,19 @@
 
   /* Sidebar */
   --sidebar-width: 256px;
+
+  /* ============================================================
+     DÉGRADÉ DE MARQUE (Bloc I, refonte visuelle 11/09/2026)
+     Source unique — auparavant dupliqué en `style` inline dans une
+     dizaine de fichiers (boutons primaires, bandeaux premium). Tout
+     nouveau bouton/bandeau de marque doit utiliser `.bg-acadia-gradient`
+     ci-dessous plutôt que recopier la valeur littérale.
+  ============================================================ */
+  --gradient-acadia-primary: linear-gradient(135deg, #2554eb 0%, #0b1b3a 130%);
+}
+
+.bg-acadia-gradient {
+  background: var(--gradient-acadia-primary);
 }
 
 html {

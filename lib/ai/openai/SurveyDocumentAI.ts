@@ -1,5 +1,6 @@
-import { openai } from "./client";
-import { AI_MODEL } from "./config";
+import { createTrackedResponse } from "./trackedResponses";
+import { selectModel } from "@/lib/server/ai/ModelRouter";
+import type { AITrackingInput } from "./SubjectUnderstandingAI";
 
 // ============================================================
 // ACADIA — RECONNAISSANCE ET RESTRUCTURATION DE QUESTIONNAIRE IMPORTÉ
@@ -99,9 +100,13 @@ function parseQuestionnaire(content: string | null | undefined): ExtractedQuesti
  * de texte, identifie réellement la numérotation, les modalités de
  * réponse et les types de question.
  */
-export async function extractQuestionnaireFromText(rawText: string): Promise<ExtractedQuestionnaire> {
-  const response = await openai.responses.create({
-    model: AI_MODEL,
+export async function extractQuestionnaireFromText(
+  rawText: string,
+  tracking: AITrackingInput = {}
+): Promise<ExtractedQuestionnaire> {
+  const { model } = selectModel("DOCUMENT_ANALYSIS");
+  const response = await createTrackedResponse({
+    model,
     input: [
       {
         role: "system",
@@ -135,6 +140,11 @@ RÈGLES STRICTES :
         schema: QUESTIONNAIRE_SCHEMA,
       },
     },
+  }, {
+    operation: "DOCUMENT_ANALYSIS",
+    userId: tracking.userId,
+    projectId: tracking.projectId,
+    correlationId: tracking.correlationId,
   });
 
   return parseQuestionnaire(response.output_text);
@@ -147,9 +157,13 @@ RÈGLES STRICTES :
  * la paire (originale conservée par l'appelant, proposée) pour
  * validation humaine explicite avant tout enregistrement.
  */
-export async function restructureQuestionnaireWithAI(questions: ExtractedQuestion[]): Promise<ExtractedQuestion[]> {
-  const response = await openai.responses.create({
-    model: AI_MODEL,
+export async function restructureQuestionnaireWithAI(
+  questions: ExtractedQuestion[],
+  tracking: AITrackingInput = {}
+): Promise<ExtractedQuestion[]> {
+  const { model } = selectModel("DOCUMENT_ANALYSIS");
+  const response = await createTrackedResponse({
+    model,
     input: [
       {
         role: "system",
@@ -183,6 +197,11 @@ Ne renvoie jamais moins ou plus de questions que fourni en entrée. La réponse 
         },
       },
     },
+  }, {
+    operation: "DOCUMENT_ANALYSIS",
+    userId: tracking.userId,
+    projectId: tracking.projectId,
+    correlationId: tracking.correlationId,
   });
 
   const content = response.output_text;

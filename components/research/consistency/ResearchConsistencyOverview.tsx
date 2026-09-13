@@ -10,6 +10,8 @@ import type {
 import type { ResearchProject } from "@/lib/core/research/ResearchTypes";
 import { useResearch } from "@/contexts/ResearchContext";
 import TheoreticalFrameworkSection from "./TheoreticalFrameworkSection";
+import TheoreticalOrientationsSection from "./TheoreticalOrientationsSection";
+import ResearchGoalsSection from "./ResearchGoalsSection";
 import HypothesisStructureSection from "./HypothesisStructureSection";
 import VariableValidationSection from "./VariableValidationSection";
 import ScientificChainStrip from "./ScientificChainStrip";
@@ -89,8 +91,16 @@ export default function ResearchConsistencyOverview({
       </section>
 
       {/* ================================================= */}
+      {/* QUESTION DE RECHERCHE & OBJECTIFS */}
+      {/* ================================================= */}
+
+      <ResearchGoalsSection project={project} />
+
+      {/* ================================================= */}
       {/* CADRE THÉORIQUE */}
       {/* ================================================= */}
+
+      <TheoreticalOrientationsSection project={project} />
 
       <TheoreticalFrameworkSection researchId={project.id} variables={project.variables} />
 
@@ -122,6 +132,7 @@ export default function ResearchConsistencyOverview({
               nonPass.length > 0
                 ? nonPass[0].message
                 : `${category} en ordre.`;
+            const suggestion = nonPass.find((i) => i.suggestion)?.suggestion;
 
             return (
               <li key={category} className="flex items-start gap-2.5 text-sm">
@@ -130,6 +141,9 @@ export default function ResearchConsistencyOverview({
                   <strong className="font-semibold text-acadia-navy">{category}</strong>
                   {" — "}
                   {label}
+                  {suggestion && (
+                    <span className="mt-0.5 block text-xs text-slate-500">À faire : {suggestion}</span>
+                  )}
                 </span>
               </li>
             );
@@ -179,7 +193,12 @@ export default function ResearchConsistencyOverview({
                 return (
                   <li key={check.id} className="flex items-start gap-2.5 text-xs sm:text-sm">
                     <Icon className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${SEVERITY_COLOR[check.severity]}`} />
-                    <span className="text-slate-600">{check.message}</span>
+                    <span className="text-slate-600">
+                      {check.message}
+                      {check.suggestion && (
+                        <span className="mt-0.5 block text-slate-400">À faire : {check.suggestion}</span>
+                      )}
+                    </span>
                   </li>
                 );
               })}

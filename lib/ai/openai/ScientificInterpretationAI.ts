@@ -1,5 +1,6 @@
-import { openai } from "./client";
-import { AI_MODEL } from "./config";
+import { createTrackedResponse } from "./trackedResponses";
+import { selectModel } from "@/lib/server/ai/ModelRouter";
+import type { AITrackingInput } from "./SubjectUnderstandingAI";
 
 // ============================================================
 // ACADIA — FORMULATION DE L'INTERPRÉTATION SCIENTIFIQUE (Mission 6, incrément 2)
@@ -106,10 +107,12 @@ const RESULT_SCHEMA = {
 };
 
 export async function interpretScientificResults(
-  context: ScientificInterpretationContext
+  context: ScientificInterpretationContext,
+  tracking: AITrackingInput = {}
 ): Promise<ScientificInterpretationAIResult> {
-  const response = await openai.responses.create({
-    model: AI_MODEL,
+  const { model } = selectModel("INTERPRETATION");
+  const response = await createTrackedResponse({
+    model,
     input: [
       {
         role: "system",
@@ -147,6 +150,11 @@ ${JSON.stringify(context, null, 2)}`,
         schema: RESULT_SCHEMA,
       },
     },
+  }, {
+    operation: "INTERPRETATION",
+    userId: tracking.userId,
+    projectId: tracking.projectId,
+    correlationId: tracking.correlationId,
   });
 
   const content = response.output_text;

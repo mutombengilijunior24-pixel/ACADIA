@@ -1,3 +1,5 @@
+import Reveal from "./Reveal";
+
 export default function Partners() {
   const universities = [
     "UNILU",
@@ -19,13 +21,13 @@ export default function Partners() {
 
         {/* Titre */}
 
-        <div className="text-center">
+        <Reveal className="text-center">
 
-          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-blue-600">
+          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-acadia-blue">
             Conçu pour la RDC
           </p>
 
-          <h2 className="mt-4 text-4xl font-bold text-slate-900">
+          <h2 className="mt-4 text-4xl font-bold text-acadia-navy">
             Pensé pour les étudiants, chercheurs et universités
           </h2>
 
@@ -35,15 +37,15 @@ export default function Partners() {
             République Démocratique du Congo.
           </p>
 
-        </div>
+        </Reveal>
 
         {/* Cartes universités */}
 
         <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
 
-          {universities.map((university) => (
+          {universities.map((university, index) => (
+            <Reveal key={university} delayMs={(index % 5) * 80}>
             <div
-              key={university}
               className="
                 rounded-2xl
                 border
@@ -55,7 +57,7 @@ export default function Partners() {
                 transition-all
                 duration-300
                 hover:-translate-y-1
-                hover:border-blue-200
+                hover:border-acadia-blue-100
                 hover:shadow-xl
               "
             >
@@ -69,10 +71,10 @@ export default function Partners() {
                   items-center
                   justify-center
                   rounded-2xl
-                  bg-blue-50
+                  bg-acadia-blue-50
                   text-xl
                   font-bold
-                  text-blue-600
+                  text-acadia-blue
                 "
               >
                 {university.substring(0, 2)}
@@ -87,6 +89,7 @@ export default function Partners() {
               </p>
 
             </div>
+            </Reveal>
           ))}
 
         </div>

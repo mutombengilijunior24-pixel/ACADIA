@@ -1,4 +1,5 @@
 import ProductDemoVideo from "./ProductDemoVideo";
+import Reveal from "./Reveal";
 
 export default function Demo() {
   return (
@@ -10,16 +11,16 @@ export default function Demo() {
 
           {/* Texte */}
 
-          <div>
+          <Reveal>
 
-            <span className="rounded-full bg-blue-100 px-4 py-2 text-sm font-semibold text-blue-700">
+            <span className="rounded-full bg-acadia-blue-50 px-4 py-2 text-sm font-semibold text-acadia-blue">
               Démonstration
             </span>
 
-            <h2 className="mt-6 text-5xl font-black leading-tight text-slate-900">
+            <h2 className="mt-6 text-5xl font-black leading-tight text-acadia-navy">
               Découvrez ACADIA
               <br />
-              en moins d'une minute
+              en moins d&apos;une minute
             </h2>
 
             <p className="mt-8 text-xl leading-9 text-slate-600">
@@ -31,32 +32,34 @@ export default function Demo() {
             <div className="mt-10 space-y-5">
 
               <div className="flex items-center gap-3">
-                <span className="text-green-500">✔</span>
+                <span className="text-emerald-500">✔</span>
                 Génération automatique du plan
               </div>
 
               <div className="flex items-center gap-3">
-                <span className="text-green-500">✔</span>
+                <span className="text-emerald-500">✔</span>
                 Création intelligente du questionnaire
               </div>
 
               <div className="flex items-center gap-3">
-                <span className="text-green-500">✔</span>
+                <span className="text-emerald-500">✔</span>
                 Analyse statistique instantanée
               </div>
 
               <div className="flex items-center gap-3">
-                <span className="text-green-500">✔</span>
+                <span className="text-emerald-500">✔</span>
                 Export du document scientifique en DOCX &amp; PDF
               </div>
 
             </div>
 
-          </div>
+          </Reveal>
 
           {/* Vidéo */}
 
-          <ProductDemoVideo />
+          <Reveal delayMs={150}>
+            <ProductDemoVideo />
+          </Reveal>
 
         </div>
 

@@ -28,6 +28,7 @@ export type AuditAction =
   | "SCIENTIFIC_CONCLUSION_VALIDATED"
   | "SCIENTIFIC_CONCLUSION_EDITED"
   | "SCIENTIFIC_CONCLUSION_REJECTED"
+  | "RESEARCH_ANALYSIS_VALIDATED"
   | "SCIENTIFIC_CONCLUSION_REGENERATED"
   | "SCIENTIFIC_CONCLUSION_OUTDATED"
   | "SUBMISSION_CREATED"
@@ -75,6 +76,7 @@ export type AuditAction =
   | "VARIABLES_GENERATED"
   | "METHODOLOGY_STARTED"
   | "METHODOLOGY_COMPLETED"
+  | "METHODOLOGY_EDITED"
   | "QUESTIONNAIRE_GENERATION_STARTED"
   | "QUESTIONNAIRE_EDITED"
   | "PUBLIC_SURVEY_OPENED"
@@ -84,7 +86,38 @@ export type AuditAction =
   | "ERROR_OCCURRED"
   | "FEEDBACK_SUBMITTED"
   | "BUG_REPORTED"
-  | "FEATURE_REQUESTED";
+  | "FEATURE_REQUESTED"
+
+  // ------------------------------------------------------------
+  // ENTONNOIR "PREVIEW SANS COMPTE" (MVP simplification, 10/09/2026)
+  //
+  // Sujet saisi sur la landing → preview A1 sans session → compte créé
+  // seulement après avoir vu la valeur. Voir app/api/preview/route.ts
+  // et app/apercu/page.tsx.
+  // ------------------------------------------------------------
+
+  | "SUBJECT_SUBMITTED"
+  | "PREVIEW_REQUESTED"
+  | "PREVIEW_GENERATED"
+  | "PREVIEW_FAILED"
+  | "PREVIEW_ACCEPTED"
+  | "PREVIEW_EDITED"
+  | "ACCOUNT_CREATED_AFTER_PREVIEW"
+  | "PHENOMENON_EVIDENCE_FETCHED"
+
+  // ------------------------------------------------------------
+  // CONVERSION + PAY-AS-YOU-PROGRESS (mission dédiée)
+  // ------------------------------------------------------------
+
+  | "PAYWALL_VIEWED"
+  | "UNLOCK_CLICKED"
+  | "CHECKOUT_STARTED"
+  | "PAYMENT_SUCCEEDED"
+  | "PAYMENT_FAILED"
+  | "ENTITLEMENT_GRANTED"
+  | "STAGE_STARTED"
+  | "STAGE_COMPLETED"
+  | "STAGE_ABANDONED";
 
 export async function logAudit(input: {
   actorId?: string;

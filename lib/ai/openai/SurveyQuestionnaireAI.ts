@@ -1,5 +1,6 @@
-import { openai } from "./client";
-import { AI_MODEL } from "./config";
+import { createTrackedResponse } from "./trackedResponses";
+import { selectModel } from "@/lib/server/ai/ModelRouter";
+import type { AITrackingInput } from "./SubjectUnderstandingAI";
 
 // ============================================================
 // ACADIA — MOTEUR MÉTHODOLOGIQUE SURVEY (génération assistée)
@@ -45,9 +46,13 @@ export interface SurveyContentBrief {
 
 const CONTENT_TYPES = ["short_text", "long_text", "single_choice", "multiple_choice", "scale", "boolean", "number"] as const;
 
-export async function generateContentQuestionsWithAI(brief: SurveyContentBrief): Promise<AIContentQuestion[]> {
-  const response = await openai.responses.create({
-    model: AI_MODEL,
+export async function generateContentQuestionsWithAI(
+  brief: SurveyContentBrief,
+  tracking: AITrackingInput = {}
+): Promise<AIContentQuestion[]> {
+  const { model } = selectModel("QUESTIONNAIRE_GENERATION");
+  const response = await createTrackedResponse({
+    model,
     input: [
       {
         role: "system",
@@ -142,6 +147,11 @@ Construis uniquement les questions de CONTENU (usage, évaluation, besoins, perc
         },
       },
     },
+  }, {
+    operation: "QUESTIONNAIRE_GENERATION",
+    userId: tracking.userId,
+    projectId: tracking.projectId,
+    correlationId: tracking.correlationId,
   });
 
   const content = response.output_text;

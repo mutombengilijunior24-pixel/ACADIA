@@ -11,6 +11,9 @@ import {
   ChevronDown,
   Plus,
   X,
+  Loader2,
+  ArrowRight,
+  Upload,
 } from "lucide-react";
 import { analyzeInstrument } from "@/lib/core/questionnaire/QuestionnaireGenerationEngine";
 import {
@@ -51,13 +54,15 @@ interface QuestionnaireOverviewProps {
   questionnaire?: GeneratedQuestionnaire;
   interviewGuide?: InterviewGuide;
   status: "draft" | "accepted";
-  onGenerate: () => void;
+  onGenerate: () => Promise<void>;
   onEditQuestion: (questionId: string, text: string) => void;
   onUpdateQuestion: (questionId: string, patch: Partial<QuestionnaireQuestion>) => void;
   onAddQuestion: (sectionId: string, payload: AddQuestionPayload) => void;
   onDeleteQuestion: (questionId: string) => void;
   onReorderQuestion: (questionId: string, direction: "up" | "down") => void;
   onAccept: () => void;
+  onContinue?: () => void;
+  onImport?: (questionnaire: GeneratedQuestionnaire) => void;
 }
 
 export default function QuestionnaireOverview({
@@ -72,9 +77,62 @@ export default function QuestionnaireOverview({
   onDeleteQuestion,
   onReorderQuestion,
   onAccept,
+  onContinue,
+  onImport,
 }: QuestionnaireOverviewProps) {
 
   const { theoreticalFramework } = useResearch();
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  async function handleGenerate() {
+    setIsGenerating(true);
+    setGenerationError(null);
+    try {
+      await onGenerate();
+    } catch (error) {
+      setGenerationError(error instanceof Error ? error.message : "ACADIA n'a pas pu générer le questionnaire pour le moment.");
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
+  async function handleImport() {
+    if (!importFile && !importText.trim()) return;
+    setIsImporting(true);
+    setImportError(null);
+    try {
+      const res = importFile
+        ? await fetch(`/api/research/${project.id}/questionnaire/import`, {
+            method: "POST",
+            body: (() => {
+              const formData = new FormData();
+              formData.set("file", importFile);
+              return formData;
+            })(),
+          })
+        : await fetch(`/api/research/${project.id}/questionnaire/import`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: importText.trim() }),
+          });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setImportError(data.error ?? "ACADIA n'a pas pu importer ce questionnaire.");
+        return;
+      }
+      onImport?.(data.questionnaire);
+    } catch {
+      setImportError("Impossible de contacter ACADIA. Vérifiez votre connexion et réessayez.");
+    } finally {
+      setIsImporting(false);
+    }
+  }
 
   if (!questionnaire && !interviewGuide) {
     const readiness = computeQuestionnaireGenerationReadiness(project);
@@ -117,12 +175,85 @@ export default function QuestionnaireOverview({
           </p>
         )}
 
-        <div className="mt-4">
-          <ResearchPrimaryButton onClick={onGenerate} disabled={!readiness.ready}>
-            <Sparkles className="h-4 w-4" />
-            Générer mon questionnaire
-          </ResearchPrimaryButton>
+        {generationError && <p className="mt-3 text-sm text-red-600">{generationError}</p>}
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          {isGenerating ? (
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-5 w-5 animate-spin text-acadia-blue" />
+              <p className="text-sm font-medium text-acadia-navy">ACADIA formule vos questions...</p>
+            </div>
+          ) : (
+            <>
+              <ResearchPrimaryButton onClick={handleGenerate} disabled={!readiness.ready}>
+                <Sparkles className="h-4 w-4" />
+                Générer mon questionnaire
+              </ResearchPrimaryButton>
+              {onImport && (
+                <button
+                  type="button"
+                  onClick={() => setShowImport((v) => !v)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-acadia-navy hover:bg-slate-50"
+                >
+                  <Upload className="h-4 w-4" />
+                  Importer mon questionnaire
+                </button>
+              )}
+            </>
+          )}
         </div>
+
+        {onImport && showImport && !isGenerating && (
+          <div className="mt-4 rounded-2xl border border-dashed border-slate-300 p-4">
+            <p className="text-sm text-slate-600">
+              Collez le texte de votre questionnaire, ou déposez un fichier Word (.docx) — ACADIA le transformera en
+              questions éditables, sans en inventer aucune.
+            </p>
+            <textarea
+              value={importText}
+              onChange={(e) => {
+                setImportText(e.target.value);
+                setImportFile(null);
+              }}
+              disabled={isImporting}
+              rows={5}
+              placeholder="Collez ici le texte de vos questions..."
+              className="mt-3 w-full rounded-xl border border-slate-300 p-2.5 text-sm text-slate-900 focus:border-acadia-blue focus:outline-none disabled:opacity-60"
+            />
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <input
+                type="file"
+                accept=".docx"
+                disabled={isImporting}
+                onChange={(e) => {
+                  const file = e.target.files?.[0] ?? null;
+                  setImportFile(file);
+                  if (file) setImportText("");
+                }}
+                className="text-xs text-slate-500"
+              />
+              {importFile && <span className="text-xs font-semibold text-acadia-navy">{importFile.name}</span>}
+            </div>
+            {importError && <p className="mt-2 text-sm text-red-600">{importError}</p>}
+            <div className="mt-3">
+              {isImporting ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-acadia-blue" />
+                  <p className="text-sm font-medium text-acadia-navy">ACADIA analyse votre questionnaire...</p>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleImport}
+                  disabled={!importFile && !importText.trim()}
+                  className="rounded-xl bg-acadia-blue px-4 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-50"
+                >
+                  Importer
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </section>
     );
   }
@@ -140,6 +271,7 @@ export default function QuestionnaireOverview({
           onDeleteQuestion={onDeleteQuestion}
           onReorderQuestion={onReorderQuestion}
           onAccept={onAccept}
+          onContinue={onContinue}
         />
       )}
       {interviewGuide && <InterviewGuideView guide={interviewGuide} />}
@@ -162,6 +294,7 @@ function QuestionnaireInstrument({
   onDeleteQuestion,
   onReorderQuestion,
   onAccept,
+  onContinue,
 }: {
   project: ResearchProject;
   questionnaire: GeneratedQuestionnaire;
@@ -172,6 +305,7 @@ function QuestionnaireInstrument({
   onDeleteQuestion: (questionId: string) => void;
   onReorderQuestion: (questionId: string, direction: "up" | "down") => void;
   onAccept: () => void;
+  onContinue?: () => void;
 }) {
 
   const { matrix } = analyzeInstrument(project, questionnaire);
@@ -285,12 +419,126 @@ function QuestionnaireInstrument({
         </div>
       )}
       {status === "accepted" && (
-        <p className="text-center text-2xs text-slate-400">
-          Instrument validé par le chercheur. Les avertissements éventuels restent visibles ci-dessus —
-          la validation n&apos;efface jamais un signal de vigilance.
-        </p>
+        <div className="flex flex-col items-center gap-2 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <p className="text-center text-2xs text-slate-400">
+            Instrument validé par le chercheur. Les avertissements éventuels restent visibles ci-dessus —
+            la validation n&apos;efface jamais un signal de vigilance.
+          </p>
+          {onContinue && (
+            <button
+              type="button"
+              onClick={onContinue}
+              className="mt-1 inline-flex items-center gap-1.5 rounded-xl bg-acadia-blue px-5 py-2.5 text-sm font-semibold text-white hover:brightness-110"
+            >
+              Étape suivante : collecter mes données <ArrowRight className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       )}
+      {status === "accepted" && <PublishQuestionnaireSection projectId={project.id} />}
     </>
+  );
+}
+
+
+// ============================================================
+// PUBLICATION EN LIEN PUBLIC (Bloc C, 11/09/2026)
+//
+// Convertit et publie via le pipeline Survey déjà mature
+// (POST /api/research/[id]/questionnaire/publish, qui réutilise
+// createSurvey + publishSurvey) — le logo, les statistiques et
+// l'export des réponses restent gérés depuis la page Survey
+// existante plutôt que dupliqués ici.
+// ============================================================
+
+function PublishQuestionnaireSection({ projectId }: { projectId: string }) {
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ surveyId: string; publicUrl: string; excludedCount: number } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function handlePublish() {
+    setIsPublishing(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/research/${projectId}/questionnaire/publish`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? "ACADIA n'a pas pu publier ce questionnaire pour le moment.");
+        return;
+      }
+      setResult(data);
+    } catch {
+      setError("Impossible de contacter ACADIA. Vérifiez votre connexion et réessayez.");
+    } finally {
+      setIsPublishing(false);
+    }
+  }
+
+  async function handleCopy() {
+    if (!result) return;
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}${result.publicUrl}`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Copie best-effort : l'échec silencieux laisse le lien affiché,
+      // copiable manuellement.
+    }
+  }
+
+  if (result) {
+    return (
+      <div className="rounded-3xl border border-emerald-200 bg-emerald-50/60 p-6 text-center">
+        <p className="text-sm font-semibold text-emerald-800">Votre questionnaire est en ligne.</p>
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+          <code className="rounded-lg bg-white px-3 py-1.5 text-sm text-acadia-navy">{result.publicUrl}</code>
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="rounded-lg bg-acadia-blue px-3 py-1.5 text-xs font-semibold text-white hover:brightness-110"
+          >
+            {copied ? "Copié !" : "Copier le lien"}
+          </button>
+        </div>
+        {result.excludedCount > 0 && (
+          <p className="mt-2 text-xs text-amber-700">
+            {result.excludedCount} question(s) conditionnelle(s) n&apos;ont pas été incluses — ce mode n&apos;est pas
+            encore pris en charge par les enquêtes en ligne.
+          </p>
+        )}
+        <a
+          href={`/dashboard/survey/${result.surveyId}`}
+          className="mt-3 inline-block text-xs font-semibold text-acadia-blue hover:underline"
+        >
+          Ajouter un logo, suivre les réponses et exporter →
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-2 rounded-3xl border border-dashed border-slate-300 bg-white p-6 text-center">
+      <p className="max-w-md text-sm text-slate-600">
+        Transformez ce questionnaire en lien partageable — vous pourrez ensuite y ajouter votre logo et suivre les
+        réponses en temps réel.
+      </p>
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      {isPublishing ? (
+        <div className="mt-1 flex items-center gap-2">
+          <Loader2 className="h-4 w-4 animate-spin text-acadia-blue" />
+          <p className="text-sm font-medium text-acadia-navy">Publication en cours...</p>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={handlePublish}
+          className="mt-1 inline-flex items-center gap-1.5 rounded-xl bg-acadia-blue px-5 py-2.5 text-sm font-semibold text-white hover:brightness-110"
+        >
+          Générer le lien public
+        </button>
+      )}
+    </div>
   );
 }
 

@@ -172,10 +172,21 @@ function buildResearchQuestions(
     return [];
   }
 
+  // Le champ "problème" peut désormais contenir un paragraphe de
+  // contexte avant la question elle-même (ex. analyse en profondeur,
+  // 10/09/2026 : "Alors que X se développe... Dans quelle mesure X
+  // est-il associé à Y ?") — on isole la DERNIÈRE phrase
+  // interrogative comme texte de la question plutôt que tout le
+  // paragraphe, sans jamais reformuler ni inventer un seul mot :
+  // c'est un découpage de texte, pas une transformation.
+  const sentences = statement.split(/(?<=[.!?])\s+/).filter(Boolean);
+  const lastSentence = sentences[sentences.length - 1] ?? statement;
+  const questionText = lastSentence.endsWith("?") ? lastSentence : statement;
+
   return [
     {
       id: "question-main",
-      text: statement,
+      text: questionText,
       type: "main",
       status: INITIAL_PROPOSAL_STATUS,
       confidence: INITIAL_CONFIDENCE,

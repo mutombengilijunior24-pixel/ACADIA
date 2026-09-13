@@ -88,7 +88,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const aiContext = buildScientificInterpretationContext(record.project, run, interpretation.hypothesisAssessments);
 
   try {
-    const aiResult = await interpretScientificResults(aiContext);
+    const aiResult = await interpretScientificResults(aiContext, { userId: user.id, projectId: id });
 
     const findings: ScientificFinding[] = aiResult.findings.map((f) => ({
       id: randomUUID(),

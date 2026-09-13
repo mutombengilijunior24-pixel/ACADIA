@@ -14,6 +14,37 @@ export async function GET() {
         researchFocus:
           "Comprendre dans quelle mesure l'accès au financement est lié à la pérennité des petites entreprises minières à Lubumbashi.",
 
+        phenomenon:
+          "Des petites entreprises minières à Lubumbashi cherchent à financer leurs activités, avec des implications sur leur pérennité.",
+
+        problem:
+          "Le lien entre l'accès au financement et la pérennité de ces entreprises n'est pas encore caractérisé.",
+
+        researchQuestion:
+          "Dans quelle mesure l'accès au financement est-il lié à la pérennité des petites entreprises minières à Lubumbashi ?",
+
+        generalObjective:
+          "Analyser le lien entre l'accès au financement et la pérennité des petites entreprises minières à Lubumbashi.",
+
+        specificObjectives: [],
+
+        researchModeTags: ["QUANTITATIVE_SURVEY"],
+
+        fieldConfidence: {
+          phenomenon: "INFERRED",
+          problem: "INFERRED",
+          researchQuestion: "INFERRED",
+          generalObjective: "INFERRED",
+          specificObjectives: "MISSING",
+          population: "KNOWN",
+          location: "KNOWN",
+          mainConcepts: "INFERRED",
+          proposedRelationship: "INFERRED",
+          researchModeTags: [{ tag: "QUANTITATIVE_SURVEY", confidence: "INFERRED" }],
+        },
+
+        phenomenonTable: [],
+
         mainConcepts: [
           "Accès au financement",
           "Sources de financement",
@@ -50,7 +81,9 @@ export async function GET() {
         ],
 
         confidence:
-          "high"
+          "high",
+
+        engineVersion: "A1.v3"
       });
 
     return Response.json({

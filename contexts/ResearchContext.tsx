@@ -47,7 +47,12 @@ import type {
   ResearchProject,
   ResearchHypothesis,
   ResearchVariable,
+  TheoreticalOrientation,
+  ResearchQuestion,
+  ResearchObjective,
   ProposalStatus,
+  ResearchMethodology,
+  ResearchAnalysisVersion,
 } from "@/lib/core/research/ResearchTypes";
 
 import type {
@@ -58,7 +63,6 @@ import type {
 } from "@/lib/core/questionnaire/QuestionnaireTypes";
 
 import {
-  generateInstrumentFromProject,
   inferQuestionType,
 } from "@/lib/core/questionnaire/QuestionnaireGenerationEngine";
 
@@ -112,6 +116,30 @@ import {
 import type {
   ResearchIntelligenceResult,
 } from "@/lib/core/research/ResearchIntelligenceEngine";
+
+// Même règle que ci-dessus : TYPE uniquement (mission Preview WOW —
+// la preview appelle désormais A1 directement, même contrat que le
+// parcours authentifié). SubjectUnderstandingAI importe aussi le SDK
+// OpenAI transitivement ; seul son contrat de données est nécessaire
+// ici pour convertir le résultat déjà reçu du client en
+// ResearchUnderstanding (voir createResearchFromPreview ci-dessous).
+import type {
+  AIResearchUnderstanding,
+} from "@/lib/ai/openai/SubjectUnderstandingAI";
+
+// Mapping A1 → ResearchUnderstanding partagé avec
+// ResearchIntelligenceEngine.ts (voir AIUnderstandingMapper.ts) — ce
+// module ne dépend que de types purs, jamais du SDK OpenAI, donc
+// importable en toute sécurité ici.
+import { convertAIUnderstanding } from "@/lib/core/research/AIUnderstandingMapper";
+
+// Contexte réellement sourcé (recherche web, voir
+// lib/ai/openai/PhenomenonContextAI.ts) — type uniquement, même
+// raison que ci-dessus. Reporté depuis la preview pour ne plus être
+// perdu à l'inscription (Research Intelligence V2).
+import type {
+  PhenomenonContextItem,
+} from "@/lib/ai/openai/PhenomenonContextAI";
 
 import {
   calculateSampleSize,
@@ -374,6 +402,15 @@ type ResearchContextType = {
   // (write-through) — "saved" uniquement après confirmation HTTP.
   saveStatus: "idle" | "saving" | "saved" | "error";
 
+  // MVP simplification (10/09/2026) — true une fois l'hydratation
+  // initiale (localStorage puis serveur, voir plus bas) terminée pour
+  // l'utilisateur courant. Un composant qui MUTE l'état juste après
+  // le montage (ex. createResearchFromPreview sur /dashboard/preview-resume)
+  // doit attendre ce signal : muter avant hydratation expose à une
+  // course où l'hydratation écrase ensuite la mutation avec un état
+  // vide/obsolète.
+  isHydrated: boolean;
+
   // ----------------------------------------------------------
   // PROJETS ENREGISTRÉS
   // ----------------------------------------------------------
@@ -451,6 +488,47 @@ type ResearchContextType = {
   createCurrentResearch:
     () => Research;
 
+  // MVP simplification (10/09/2026) — crée un projet directement à
+  // partir d'un sujet + d'une preview déjà obtenus sans compte (voir
+  // app/api/preview/route.ts, components/landing/SubjectPreviewOverlay.tsx),
+  // sans relancer l'IA. Même moteur que createCurrentResearch
+  // (createResearchProject), point d'entrée distinct car il n'y a
+  // pas encore de currentResearch/currentProject ambiant à ce stade.
+  createResearchFromPreview:
+    (subject: string, understanding: AIResearchUnderstanding, contextItems?: PhenomenonContextItem[] | null) => Research;
+
+  // Analyse en profondeur (10/09/2026) — remplace l'état local d'UN
+  // projet par la version déjà persistée côté serveur (voir
+  // POST /api/research/[id]/deep-analysis, qui fait le travail réel
+  // via A1/A2 réutilisés). Ne relance jamais l'IA ici.
+  applyProjectUpdate:
+    (id: string, project: ResearchProject) => void;
+
+  updateTheoreticalOrientationStatus:
+    (id: string, orientationId: string, status: ProposalStatus) => void;
+
+  // ----------------------------------------------------------
+  // QUESTION DE RECHERCHE / OBJECTIFS — ÉCRITURE MANUELLE
+  //
+  // Contrairement aux variables/hypothèses/orientations (proposées
+  // par l'IA puis acceptées/rejetées), la question de recherche et
+  // les objectifs sont ici directement écrits par l'étudiant quand
+  // ResearchConsistencyEngine signale leur absence — jamais générés
+  // ni reformulés par ACADIA à cet endroit.
+  // ----------------------------------------------------------
+
+  setResearchQuestion:
+    (id: string, text: string) => void;
+
+  setGeneralObjective:
+    (id: string, text: string) => void;
+
+  addSpecificObjective:
+    (id: string, text: string) => void;
+
+  removeObjective:
+    (id: string, objectiveId: string) => void;
+
   // ----------------------------------------------------------
   // INTELLIGENCE IA
   // ----------------------------------------------------------
@@ -484,6 +562,20 @@ type ResearchContextType = {
   validateMethodology:
     (id: string) => void;
 
+  /**
+   * P16 (Bloc H) — permet au chercheur de modifier/corriger un ou
+   * plusieurs champs de la méthodologie proposée par ACADIA (ex.
+   * technique d'échantillonnage, taille d'échantillon, devis de
+   * recherche...) avant ou après validation. "Contester" une
+   * proposition ACADIA se fait ainsi : en la remplaçant par sa
+   * propre valeur, jamais par un simple rejet sans alternative.
+   * Si la méthodologie était déjà "accepted", une modification la
+   * repasse à "draft" — une méthodologie modifiée redevient une
+   * proposition à revalider, cohérent avec le sens de "valider".
+   */
+  updateMethodologyFields:
+    (id: string, changes: Partial<ResearchMethodology>) => void;
+
   // ----------------------------------------------------------
   // HYPOTHÈSES SECONDAIRES (P13.2)
   // ----------------------------------------------------------
@@ -515,7 +607,14 @@ type ResearchContextType = {
     Record<string, InstrumentRecord>;
 
   generateInstrument:
-    (id: string) => void;
+    (id: string) => Promise<void>;
+
+  // Applique un questionnaire déjà importé/restructuré côté serveur
+  // (Bloc D, 11/09/2026, voir POST /api/research/[id]/questionnaire/
+  // import) — même état final que generateInstrument, mais sans
+  // relancer l'IA ici : la conversion a déjà eu lieu côté serveur.
+  setImportedInstrument:
+    (id: string, questionnaire: GeneratedQuestionnaire) => void;
 
   updateInstrumentQuestionText:
     (id: string, questionId: string, text: string) => void;
@@ -561,6 +660,16 @@ type ResearchContextType = {
 
   generateDataset:
     (id: string) => void;
+
+  // P17 — dataset importé (CSV, Module 2/Missions 4-7) : même
+  // colonne Prisma que `datasets` ci-dessus (voir
+  // ResearchStateService.syncResearchState), donc câblé sur le
+  // MÊME state que generateDataset. Sans ceci, la synchronisation
+  // globale débouncée écraserait silencieusement le dataset importé
+  // au prochain enregistrement (elle réécrit `datasets[id]` en
+  // entier à chaque frappe ailleurs dans l'app).
+  setImportedDataset:
+    (id: string, dataset: Dataset) => void;
 
   addObservation:
     (id: string, values: Dataset["rows"][number]["values"], respondentId?: string) => void;
@@ -1212,6 +1321,261 @@ export function ResearchProvider({
   }
 
 
+  // Conversion PreviewNarrative → ResearchUnderstanding — champs
+  // Mission Preview WOW — toResearchUnderstanding (mapping ad hoc du
+  // format PreviewNarrative) a disparu : la preview produit désormais
+  // EXACTEMENT le même contrat A1 (AIResearchUnderstanding) que le
+  // parcours authentifié, converti par la même fonction partagée
+  // (convertAIUnderstanding, voir AIUnderstandingMapper.ts) — plus
+  // aucune divergence possible entre "ce que la preview affiche" et
+  // "ce que le projet retient après inscription".
+
+  // MVP simplification (10/09/2026, unifié sur A1 — mission Preview
+  // WOW) — voir le commentaire sur createResearchFromPreview dans le
+  // type du contexte. Construit un projet directement depuis un sujet
+  // + une compréhension A1 déjà obtenue (jamais un nouvel appel IA
+  // ici), puis suit exactement le même chemin de persistance que
+  // createCurrentResearch.
+  function createResearchFromPreview(
+    subject: string,
+    understanding: AIResearchUnderstanding,
+    contextItems?: PhenomenonContextItem[] | null
+  ): Research {
+    // Le champ "problem" alimente à la fois project.problem.statement
+    // et project.researchQuestions (voir ResearchCore.buildResearchQuestions,
+    // qui n'extrait désormais que la dernière phrase interrogative) —
+    // on y met le problème identifié par A1 suivi de la vraie question
+    // de recherche qu'il propose, jamais une question inventée par ce
+    // contexte.
+    const problemText = [understanding.problem, understanding.researchQuestion].filter(Boolean).join(" ");
+
+    const research: ResearchData = {
+      ...initialResearchData,
+      title: subject.trim(),
+      problem: problemText,
+      objective: understanding.generalObjective,
+      objectives: understanding.specificObjectives,
+      population: understanding.population ?? "",
+      location: understanding.location ?? "",
+    };
+
+    const base = createResearchProject(research);
+
+    // Mission Server Contracts & Research Persistence — la toute
+    // première analyse d'un projet devient elle aussi une VERSION
+    // (analysisHistory[0]), jamais un simple champ isolé : un
+    // chercheur qui relance une analyse en profondeur après
+    // inscription verra sa preview conservée comme version 1, pas
+    // écrasée. "generated" (jamais "validated" d'office) : cliquer
+    // "Utiliser cette proposition" accepte de partir de cette base,
+    // pas de la valider scientifiquement — la validation explicite
+    // reste un acte distinct (voir /api/research/[id]/understanding/validate).
+    const firstVersion: ResearchAnalysisVersion = {
+      id: `analysis-version-preview-${Date.now()}`,
+      version: 1,
+      engineVersion: understanding.engineVersion,
+      provenance: "AI_INFERENCE",
+      validation: "generated",
+      createdAt: new Date().toISOString(),
+      understanding: convertAIUnderstanding(understanding),
+      variables: [],
+      relations: [],
+      hypothesesAdded: [],
+    };
+
+    const project = updateResearchProject(base, {
+      understanding: firstVersion.understanding,
+      analysisHistory: [firstVersion],
+      // Research Intelligence V2 — auparavant jamais reporté ici : les
+      // sources réellement trouvées par PhenomenonContextAI
+      // disparaissaient silencieusement à l'inscription. Toujours
+      // distinct du raisonnement d'A1 (provenance figée).
+      sourcedContext: (contextItems ?? [])
+        .filter((item) => item?.sourceUrl && item?.text)
+        .map((item) => ({
+          text: item.text,
+          sourceUrl: item.sourceUrl,
+          sourceTitle: item.sourceTitle,
+          provenance: "PROVENANT_D_UNE_SOURCE" as const,
+        })),
+    });
+
+    setCurrentProject(project);
+    setCurrentResearch(research);
+
+    const researchRecord: Research = {
+      ...research,
+      id: project.id,
+      title: project.title,
+      description: project.description,
+      status: project.status,
+      progress: 0,
+      createdAt: project.metadata.createdAt ? new Date(project.metadata.createdAt) : new Date(),
+      updatedAt: project.metadata.updatedAt ? new Date(project.metadata.updatedAt) : new Date(),
+    };
+
+    setResearches((previous) => [researchRecord, ...previous.filter((item) => item.id !== researchRecord.id)]);
+    setProjects((previous) => ({ ...previous, [project.id]: project }));
+
+    return researchRecord;
+  }
+
+  // Analyse en profondeur — voir le commentaire sur applyProjectUpdate
+  // dans le type du contexte. Simple synchronisation d'état, aucune
+  // logique d'analyse ici (déjà faite côté serveur).
+  function applyProjectUpdate(
+    id: string,
+    project: ResearchProject
+  ) {
+    setProjects((previous) => ({ ...previous, [id]: project }));
+
+    if (currentProject?.id === id) {
+      setCurrentProject(project);
+    }
+  }
+
+  // Même patron que updateVariableStatus, appliqué aux orientations
+  // théoriques (analyse en profondeur, 10/09/2026).
+  function updateTheoreticalOrientationStatus(
+    id: string,
+    orientationId: string,
+    status: ProposalStatus
+  ) {
+
+    function applyStatus(orientations: TheoreticalOrientation[] | undefined): TheoreticalOrientation[] | undefined {
+      return orientations?.map((o) => (o.id === orientationId ? { ...o, status } : o));
+    }
+
+    setProjects(
+      (previous) => {
+        const existing = previous[id];
+        if (!existing) return previous;
+        return {
+          ...previous,
+          [id]: {
+            ...existing,
+            theoreticalOrientations: applyStatus(existing.theoreticalOrientations),
+            updatedAt: new Date(),
+          },
+        };
+      }
+    );
+
+    if (currentProject?.id === id) {
+      setCurrentProject(
+        (project) =>
+          project
+            ? { ...project, theoreticalOrientations: applyStatus(project.theoreticalOrientations), updatedAt: new Date() }
+            : project
+      );
+    }
+  }
+
+  // Applique une transformation au projet ciblé, à la fois dans
+  // `projects` et dans `currentProject` s'il s'agit du même —
+  // factorise le patron répété par updateTheoreticalOrientationStatus
+  // et updateVariableStatus pour les 4 mutateurs manuels ci-dessous.
+  function mutateProject(
+    id: string,
+    apply: (project: ResearchProject) => ResearchProject
+  ) {
+    setProjects((previous) => {
+      const existing = previous[id];
+      if (!existing) return previous;
+      return { ...previous, [id]: apply(existing) };
+    });
+
+    if (currentProject?.id === id) {
+      setCurrentProject((project) => (project ? apply(project) : project));
+    }
+  }
+
+  // La question de recherche est ici écrite directement par
+  // l'étudiant (jamais générée ni reformulée par ACADIA à cet
+  // endroit) : elle est donc immédiatement "accepted", au sens où
+  // c'est déjà l'auteur qui valide son propre texte.
+  function setResearchQuestion(id: string, text: string) {
+    const clean = text.replace(/\s+/g, " ").trim();
+    if (!clean) return;
+
+    mutateProject(id, (project) => {
+      const existing = project.researchQuestions.find((q) => q.type === "main");
+      const question: ResearchQuestion = {
+        id: existing?.id ?? "question-main",
+        text: clean,
+        type: "main",
+        status: "accepted",
+        confidence: "high",
+      };
+      return {
+        ...project,
+        researchQuestions: existing
+          ? project.researchQuestions.map((q) => (q.id === existing.id ? question : q))
+          : [...project.researchQuestions, question],
+        updatedAt: new Date(),
+      };
+    });
+  }
+
+  function setGeneralObjective(id: string, text: string) {
+    const clean = text.replace(/\s+/g, " ").trim();
+    if (!clean) return;
+
+    mutateProject(id, (project) => {
+      const existing = project.objectives.find((o) => o.role === "general");
+      const objective: ResearchObjective = {
+        id: existing?.id ?? "objective-general",
+        text: clean,
+        title: clean,
+        role: "general",
+        type: "general",
+        status: "accepted",
+        confidence: "high",
+      };
+      return {
+        ...project,
+        objectives: existing
+          ? project.objectives.map((o) => (o.id === existing.id ? objective : o))
+          : [...project.objectives, objective],
+        updatedAt: new Date(),
+      };
+    });
+  }
+
+  function addSpecificObjective(id: string, text: string) {
+    const clean = text.replace(/\s+/g, " ").trim();
+    if (!clean) return;
+
+    mutateProject(id, (project) => {
+      const specificCount = project.objectives.filter((o) => o.role === "specific").length;
+      const objective: ResearchObjective = {
+        id: `objective-specific-manual-${Date.now()}`,
+        text: clean,
+        title: clean,
+        role: "specific",
+        type: "specific",
+        index: specificCount + 1,
+        order: specificCount + 1,
+        status: "accepted",
+        confidence: "high",
+      };
+      return {
+        ...project,
+        objectives: [...project.objectives, objective],
+        updatedAt: new Date(),
+      };
+    });
+  }
+
+  function removeObjective(id: string, objectiveId: string) {
+    mutateProject(id, (project) => ({
+      ...project,
+      objectives: project.objectives.filter((o) => o.id !== objectiveId),
+      updatedAt: new Date(),
+    }));
+  }
+
+
   // ==========================================================
   // AJOUTER UNE RECHERCHE
   // ==========================================================
@@ -1527,6 +1891,81 @@ export function ResearchProvider({
 
 
   // ==========================================================
+  // MODIFIER LA MÉTHODOLOGIE (Bloc H, P16)
+  //
+  // Permet au chercheur de corriger/remplacer un ou plusieurs
+  // champs de methodology.* (ex. samplingMethod, sampleSize,
+  // researchDesignType, populationSize...) — c'est ainsi qu'on
+  // "conteste" une proposition ACADIA : en la remplaçant, jamais
+  // par un simple rejet sans alternative. Une modification après
+  // acceptation repasse le statut à "draft" (une proposition
+  // modifiée redevient une proposition à revalider) ; avant
+  // acceptation, le statut reste inchangé.
+  // ==========================================================
+
+  function updateMethodologyFields(
+    id: string,
+    changes: Partial<ResearchMethodology>
+  ) {
+
+    setProjects(
+      (previous) => {
+
+        const existing =
+          previous[id];
+
+        if (!existing) {
+          return previous;
+        }
+
+        const nextStatus =
+          existing.methodology.status === "accepted"
+            ? "draft"
+            : existing.methodology.status;
+
+        return {
+          ...previous,
+          [id]: {
+            ...existing,
+            methodology: {
+              ...existing.methodology,
+              ...changes,
+              status: nextStatus,
+            },
+            updatedAt: new Date(),
+          },
+        };
+      }
+    );
+
+    if (
+      currentProject?.id === id
+    ) {
+
+      setCurrentProject(
+        (project) =>
+          project
+            ? {
+                ...project,
+                methodology: {
+                  ...project.methodology,
+                  ...changes,
+                  status:
+                    project.methodology.status === "accepted"
+                      ? "draft"
+                      : project.methodology.status,
+                },
+                updatedAt: new Date(),
+              }
+            : project
+      );
+    }
+
+    trackClientEvent("METHODOLOGY_EDITED", { projectId: id });
+  }
+
+
+  // ==========================================================
   // HYPOTHÈSES SECONDAIRES (P13.2)
   //
   // addHypothesis ajoute une hypothèse déjà entièrement formée
@@ -1749,11 +2188,15 @@ export function ResearchProvider({
   // generateInstrument() ne régénère JAMAIS un instrument déjà
   // présent — une régénération effacerait silencieusement les
   // modifications humaines déjà acceptées, ce que P4 interdit
-  // explicitement. Le moteur (déterministe, aucun appel OpenAI)
-  // est appelé une seule fois par projet.
+  // explicitement. Le moteur structurel (déterministe, aucun appel
+  // OpenAI, voir QuestionnaireGenerationEngine.ts) est appelé une
+  // seule fois par projet, côté serveur (Bloc A, 11/09/2026) via
+  // POST /api/research/[id]/questionnaire/generate, qui l'enrichit
+  // ensuite d'une formulation IA — la clé OpenAI ne peut pas être
+  // exposée côté client, d'où cet appel réseau.
   // ==========================================================
 
-  function generateInstrument(
+  async function generateInstrument(
     id: string
   ) {
 
@@ -1761,16 +2204,19 @@ export function ResearchProvider({
       return;
     }
 
-    const project = projects[id];
-
-    if (!project) {
+    if (!projects[id]) {
       return;
     }
 
-    const result =
-      generateInstrumentFromProject(
-        project
-      );
+    const res = await fetch(`/api/research/${id}/questionnaire/generate`, {
+      method: "POST",
+    });
+
+    const result = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      throw new Error(result.error ?? "ACADIA n'a pas pu générer le questionnaire pour le moment.");
+    }
 
     setInstruments(
       (previous) => ({
@@ -1778,6 +2224,26 @@ export function ResearchProvider({
         [id]: {
           questionnaire: result.questionnaire,
           interviewGuide: result.interviewGuide,
+          status: "draft",
+        },
+      })
+    );
+  }
+
+  function setImportedInstrument(
+    id: string,
+    questionnaire: GeneratedQuestionnaire
+  ) {
+
+    if (instruments[id]) {
+      return;
+    }
+
+    setInstruments(
+      (previous) => ({
+        ...previous,
+        [id]: {
+          questionnaire,
           status: "draft",
         },
       })
@@ -2181,6 +2647,23 @@ export function ResearchProvider({
     );
   }
 
+  // Voir le commentaire sur setImportedDataset dans le type du
+  // contexte : synchronise l'état local avec un dataset déjà
+  // persisté côté serveur (POST .../dataset/import ou PATCH
+  // .../dataset/mapping) pour que la sync globale débouncée ne
+  // l'efface pas silencieusement au prochain enregistrement.
+  function setImportedDataset(
+    id: string,
+    dataset: Dataset
+  ) {
+    setDatasets(
+      (previous) => ({
+        ...previous,
+        [id]: dataset,
+      })
+    );
+  }
+
 
   // ==========================================================
   // AJOUTER UNE OBSERVATION (P5, B12)
@@ -2449,6 +2932,7 @@ export function ResearchProvider({
       value={{
 
         saveStatus,
+        isHydrated,
 
         // ----------------------------------------------------
         // Projets
@@ -2508,6 +2992,13 @@ export function ResearchProvider({
         // ----------------------------------------------------
 
         createCurrentResearch,
+        createResearchFromPreview,
+        applyProjectUpdate,
+        updateTheoreticalOrientationStatus,
+        setResearchQuestion,
+        setGeneralObjective,
+        addSpecificObjective,
+        removeObjective,
 
         buildCurrentProject,
 
@@ -2534,6 +3025,7 @@ export function ResearchProvider({
         restoreResearch,
 
         validateMethodology,
+        updateMethodologyFields,
 
         addHypothesis,
 
@@ -2545,6 +3037,7 @@ export function ResearchProvider({
         instruments,
 
         generateInstrument,
+        setImportedInstrument,
 
         updateInstrumentQuestionText,
 
@@ -2566,6 +3059,7 @@ export function ResearchProvider({
         datasets,
 
         generateDataset,
+        setImportedDataset,
 
         addObservation,
 

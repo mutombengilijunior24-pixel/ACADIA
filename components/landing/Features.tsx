@@ -1,7 +1,7 @@
 "use client";
 
-import { Key, ReactElement, JSXElementConstructor, ReactNode, ReactPortal } from "react";
 import { features } from "../../data/features";
+import Reveal from "./Reveal";
 
 import {
   Brain,
@@ -33,13 +33,13 @@ export default function Features() {
 
         {/* Header */}
 
-        <div className="mx-auto max-w-3xl text-center">
+        <Reveal className="mx-auto max-w-3xl text-center">
 
-          <span className="inline-flex rounded-full bg-blue-100 px-5 py-2 text-sm font-semibold text-blue-600">
+          <span className="inline-flex rounded-full bg-acadia-blue-50 px-5 py-2 text-sm font-semibold text-acadia-blue">
             Fonctionnalités
           </span>
 
-          <h2 className="mt-6 text-5xl font-black leading-tight text-slate-900">
+          <h2 className="mt-6 text-5xl font-black leading-tight text-acadia-navy">
             Une plateforme.
             <br />
             Tous les outils de la recherche.
@@ -47,12 +47,12 @@ export default function Features() {
 
           <p className="mt-6 text-xl leading-9 text-slate-600">
             ACADIA réunit la compréhension du sujet,
-            les questionnaires, l'analyse statistique,
-            l'interprétation et la production scientifique
+            les questionnaires, l&apos;analyse statistique,
+            l&apos;interprétation et la production scientifique
             dans une seule plateforme.
           </p>
 
-        </div>
+        </Reveal>
 
         {/* Cards */}
 
@@ -65,8 +65,8 @@ export default function Features() {
 
             return (
 
+              <Reveal key={index} delayMs={(index % 3) * 100}>
               <div
-                key={index}
                 className="
                   group
                   rounded-3xl
@@ -78,7 +78,7 @@ export default function Features() {
                   transition-all
                   duration-300
                   hover:-translate-y-2
-                  hover:border-blue-500
+                  hover:border-acadia-blue
                   hover:shadow-2xl
                 "
               >
@@ -104,7 +104,7 @@ export default function Features() {
 
                 {/* Title */}
 
-                <h3 className="mt-6 text-2xl font-bold text-slate-900">
+                <h3 className="mt-6 text-2xl font-bold text-acadia-navy">
                   {feature.title}
                 </h3>
 
@@ -139,7 +139,7 @@ export default function Features() {
 
                 {/* Footer */}
 
-                <div className="mt-8 flex items-center gap-2 font-semibold text-blue-600">
+                <div className="mt-8 flex items-center gap-2 font-semibold text-acadia-blue">
 
                   Explorer
 
@@ -156,6 +156,7 @@ export default function Features() {
                 </div>
 
               </div>
+              </Reveal>
 
             );
 

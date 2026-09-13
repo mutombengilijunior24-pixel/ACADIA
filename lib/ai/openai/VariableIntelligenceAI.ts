@@ -1,8 +1,9 @@
-import { openai } from "./client";
-import { AI_MODEL } from "./config";
+import { createTrackedResponse } from "./trackedResponses";
+import { selectModel } from "@/lib/server/ai/ModelRouter";
 
 import type {
   AIResearchUnderstanding,
+  AITrackingInput,
 } from "./SubjectUnderstandingAI";
 
 
@@ -127,7 +128,8 @@ export interface AIVariableIntelligenceResult {
 
 export async function analyzeVariablesWithAI(
   understanding:
-    AIResearchUnderstanding
+    AIResearchUnderstanding,
+  tracking: AITrackingInput = {}
 ): Promise<AIVariableIntelligenceResult> {
 
 
@@ -135,10 +137,14 @@ export async function analyzeVariablesWithAI(
      APPEL OPENAI
   ======================================================= */
 
-  const response =
-    await openai.responses.create({
+  const { model } = selectModel("VARIABLE_ANALYSIS", {
+    researchModeTags: understanding.researchModeTags,
+  });
 
-      model: AI_MODEL,
+  const response =
+    await createTrackedResponse({
+
+      model,
 
       input: [
 
@@ -227,6 +233,41 @@ RÈGLES SCIENTIFIQUES
 
 - Le chercheur doit pouvoir accepter, modifier
   ou refuser chaque proposition.
+
+=========================================================
+ADAPTATION AU(X) MODE(S) DE RECHERCHE (researchModeTags)
+=========================================================
+
+La compréhension d'A1 inclut désormais researchModeTags
+(classification multi-label) et phenomenonTable (tableau de
+structuration du phénomène, indicateur → donnée nécessaire).
+Utilise-les pour adapter la nature des variables proposées :
+
+- Si FINANCIAL_ANALYSIS est présent : privilégie des
+  variables et indicateurs de nature financière/comptable
+  (ex. rentabilité, structure financière, liquidité) plutôt
+  que des construits attitudinaux à échelle de Likert. Les
+  indicateurs peuvent directement reprendre les lignes de
+  phenomenonTable lorsqu'elles sont pertinentes (ex. "marge
+  nette", "ROA") plutôt qu'inventer d'autres mesures.
+
+- Si SECONDARY_DATA est présent : les indicateurs doivent
+  rester mesurables à partir de données déjà existantes
+  (statistiques, rapports) plutôt que supposer une collecte
+  primaire par questionnaire.
+
+- Si QUALITATIVE est présent (sans QUANTITATIVE_SURVEY ni
+  MIXED_METHOD) : les dimensions/indicateurs doivent rester
+  compatibles avec une analyse thématique (thèmes,
+  sous-thèmes, catégories de sens) plutôt que des échelles
+  quantitatives.
+
+- Si QUANTITATIVE_SURVEY ou MIXED_METHOD est présent : les
+  indicateurs mesurables par questionnaire restent
+  pertinents comme aujourd'hui.
+
+Ne force jamais un type d'indicateur incompatible avec les
+tags identifiés par A1.
 
 =========================================================
 INTERDICTIONS
@@ -532,6 +573,11 @@ Ne génère rien d'autre.
           }
         }
       }
+    }, {
+      operation: "VARIABLE_ANALYSIS",
+      userId: tracking.userId,
+      projectId: tracking.projectId,
+      correlationId: tracking.correlationId,
     });
 
 

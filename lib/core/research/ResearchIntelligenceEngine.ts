@@ -28,9 +28,12 @@
 
 import type { ResearchData } from "@/types/Research";
 
+import { randomUUID } from "node:crypto";
+
 import {
   understandResearchWithAI,
   type AIResearchUnderstanding,
+  type AITrackingInput,
 } from "@/lib/ai/openai/SubjectUnderstandingAI";
 
 import {
@@ -56,10 +59,10 @@ import {
   updateResearchProject,
 } from "./ResearchCore";
 
+import { convertAIUnderstanding, normalizeConfidence } from "./AIUnderstandingMapper";
+
 import type {
   ResearchProject,
-  ResearchUnderstanding,
-  ConfidenceLevel,
 } from "./ResearchTypes";
 
 
@@ -140,104 +143,16 @@ export interface ResearchIntelligenceResult {
 
 
 // ============================================================
-// NORMALISATION DE LA CONFIANCE
-// ============================================================
-
-function normalizeConfidence(
-  value: unknown
-): ConfidenceLevel {
-
-  if (
-    value === "high" ||
-    value === "medium" ||
-    value === "low"
-  ) {
-    return value;
-  }
-
-  return "medium";
-}
-
-
-// ============================================================
 // CONVERSION A1 → RESEARCH CORE
+//
+// normalizeConfidence / convertAIUnderstanding vivent désormais dans
+// AIUnderstandingMapper.ts (mission Preview WOW) — partagées avec
+// contexts/ResearchContext.tsx (preview anonyme → projet après
+// inscription), qui ne peut pas importer ce fichier-ci (transitivement
+// dépendant du SDK OpenAI, interdit côté client).
 // ============================================================
 
-function convertUnderstanding(
-  understanding:
-    AIResearchUnderstanding
-): ResearchUnderstanding {
-
-  return {
-
-    // --------------------------------------------------------
-    // Informations principales
-    // --------------------------------------------------------
-
-    researchFocus:
-      understanding.researchFocus,
-
-    mainConcepts:
-      understanding.mainConcepts,
-
-    population:
-      understanding.population,
-
-    location:
-      understanding.location,
-
-
-    // --------------------------------------------------------
-    // Relation proposée
-    // --------------------------------------------------------
-
-    proposedRelationship:
-      understanding.proposedRelationship
-        ? {
-            from:
-              understanding.proposedRelationship.from,
-
-            to:
-              understanding.proposedRelationship.to,
-
-            relation:
-              understanding.proposedRelationship.relation,
-
-            description:
-              understanding.proposedRelationship.description,
-          }
-        : undefined,
-
-
-    // --------------------------------------------------------
-    // Hypothèses de compréhension
-    // --------------------------------------------------------
-
-    assumptions:
-      understanding.assumptions,
-
-    pointsToConfirm:
-      understanding.pointsToConfirm,
-
-
-    // --------------------------------------------------------
-    // Confiance
-    // --------------------------------------------------------
-
-    confidence:
-      normalizeConfidence(
-        understanding.confidence
-      ),
-
-
-    // --------------------------------------------------------
-    // Statut
-    // --------------------------------------------------------
-
-    status:
-      "proposed",
-  };
-}
+const convertUnderstanding = convertAIUnderstanding;
 
 
 // ============================================================
@@ -320,6 +235,21 @@ function getUnderstandingWarnings(
   }
 
 
+  // ----------------------------------------------------------
+  // Mode de recherche non identifié (Research Intelligence V2)
+  // ----------------------------------------------------------
+
+  if (
+    !understanding.researchModeTags ||
+    understanding.researchModeTags.length === 0
+  ) {
+
+    warnings.push(
+      "Aucun mode de recherche (enquête, financier, qualitatif, données secondaires...) n'a pu être identifié avec suffisamment de précision."
+    );
+  }
+
+
   return warnings;
 }
 
@@ -362,7 +292,8 @@ function uniqueWarnings(
 
 export async function analyzeResearch(
   research:
-    ResearchData
+    ResearchData,
+  tracking: AITrackingInput = {}
 ): Promise<ResearchIntelligenceResult> {
 
   // ----------------------------------------------------------
@@ -376,6 +307,14 @@ export async function analyzeResearch(
     createResearchProject(
       research
     );
+
+  // Un seul correlationId partagé par A1 ET A2 de ce run — permet de
+  // relier les deux lignes AIUsageLedger d'une même analyse dans le
+  // journal (voir lib/server/ai/AIUsageLedger.ts).
+  const runTracking: AITrackingInput = {
+    ...tracking,
+    correlationId: tracking.correlationId ?? randomUUID(),
+  };
 
 
   try {
@@ -430,7 +369,7 @@ export async function analyzeResearch(
 
         location:
           research.location,
-      });
+      }, runTracking);
 
 
     // ========================================================
@@ -449,7 +388,8 @@ export async function analyzeResearch(
 
     const variableAnalysis =
       await analyzeVariablesWithAI(
-        understanding
+        understanding,
+        runTracking
       );
 
 

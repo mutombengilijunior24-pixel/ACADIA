@@ -1,5 +1,6 @@
-import { openai } from "./client";
-import { AI_MODEL } from "./config";
+import { createTrackedResponse } from "./trackedResponses";
+import { selectModel } from "@/lib/server/ai/ModelRouter";
+import type { AITrackingInput } from "./SubjectUnderstandingAI";
 
 // ============================================================
 // ACADIA — PASSERELLE « INTERPRÉTER AVEC ACADIA » (P20-B)
@@ -77,9 +78,13 @@ const RESULT_SCHEMA = {
   additionalProperties: false as const,
 };
 
-export async function interpretSurveyResults(context: InterpretationContext): Promise<InterpretationResult> {
-  const response = await openai.responses.create({
-    model: AI_MODEL,
+export async function interpretSurveyResults(
+  context: InterpretationContext,
+  tracking: AITrackingInput = {}
+): Promise<InterpretationResult> {
+  const { model } = selectModel("INTERPRETATION");
+  const response = await createTrackedResponse({
+    model,
     input: [
       {
         role: "system",
@@ -129,6 +134,11 @@ ${JSON.stringify(context, null, 2)}`,
         schema: RESULT_SCHEMA,
       },
     },
+  }, {
+    operation: "INTERPRETATION",
+    userId: tracking.userId,
+    projectId: tracking.projectId,
+    correlationId: tracking.correlationId,
   });
 
   const content = response.output_text;

@@ -85,6 +85,217 @@ export type ConfidenceLevel =
 
 
 // ============================================================
+// MODES DE RECHERCHE (Research Intelligence V2)
+//
+// Classification MULTI-LABEL produite par A1 (jamais une catégorie
+// unique forcée) : un sujet peut relever à la fois de FINANCIAL_ANALYSIS,
+// CASE_STUDY et SECONDARY_DATA. CASE_STUDY n'est jamais synonyme de
+// MIXED_METHOD — le premier est un cadre/contexte d'étude, le second
+// une combinaison de méthodes quanti/quali. Voir
+// lib/core/research/ResearchModeTaxonomy.ts pour les libellés.
+// ============================================================
+
+export type ResearchModeTag =
+  | "QUANTITATIVE_SURVEY"
+  | "QUALITATIVE"
+  | "FINANCIAL_ANALYSIS"
+  | "SECONDARY_DATA"
+  | "MIXED_METHOD"
+  | "CASE_STUDY"
+  | "DESCRIPTIVE"
+  | "CORRELATIONAL"
+  | "EXPLANATORY"
+  | "COMPARATIVE";
+
+
+// ============================================================
+// FIABILITÉ PAR CHAMP (Research Intelligence V2)
+//
+// Remplace/complète la seule confiance globale (ConfidenceLevel)
+// lorsqu'une réponse champ par champ est nécessaire — distingue
+// explicitement ce que le chercheur a écrit (KNOWN), ce qu'A1 en
+// déduit (INFERRED), ce qu'A1 propose au-delà du texte (PROPOSED),
+// ce qui manque (MISSING) et ce qui doit être vérifié par le
+// chercheur (TO_VERIFY). Jamais une invention présentée comme KNOWN.
+// ============================================================
+
+export type FieldConfidenceStatus =
+  | "KNOWN"
+  | "INFERRED"
+  | "PROPOSED"
+  | "MISSING"
+  | "TO_VERIFY"
+  | "SOURCED";
+
+export interface ResearchModeTagConfidence {
+  tag: ResearchModeTag;
+  confidence: FieldConfidenceStatus;
+}
+
+export interface FieldConfidenceMap {
+  phenomenon: FieldConfidenceStatus;
+  problem: FieldConfidenceStatus;
+  population: FieldConfidenceStatus;
+  location: FieldConfidenceStatus;
+  mainConcepts: FieldConfidenceStatus;
+  proposedRelationship: FieldConfidenceStatus;
+  /**
+   * Research Intelligence V3 — ferme la chaîne phénomène → problème →
+   * question → objectifs (voir section 1 de la mission V3). SOURCED
+   * n'est jamais assigné par A1 lui-même (il n'a accès à aucune
+   * recherche documentaire) — réservé à un enrichissement ultérieur.
+   */
+  researchQuestion: FieldConfidenceStatus;
+  generalObjective: FieldConfidenceStatus;
+  specificObjectives: FieldConfidenceStatus;
+  /**
+   * Une entrée par tag présent dans researchModeTags — jamais la
+   * taxonomie entière, seulement les tags réellement assignés.
+   */
+  researchModeTags: ResearchModeTagConfidence[];
+}
+
+
+// ============================================================
+// TABLEAU PHÉNOMÈNE → INDICATEUR → DONNÉE (Research Intelligence V2,
+// enrichi V3)
+//
+// ATTENTION : ceci est un tableau de STRUCTURATION du phénomène,
+// PAS un tableau de chiffres réels. `status` décrit l'état de LA
+// RECHERCHE de la donnée (KNOWN/INFERRED/PROPOSED/MISSING/TO_VERIFY/
+// SOURCED) — même vocabulaire que FieldConfidenceStatus, jamais une
+// valeur observée. SOURCED n'est légitime que si `source` cite
+// réellement une provenance vérifiable (voir SubjectUnderstandingAI.ts
+// et ResearchConsistencyEngine.ts, qui vérifie cette règle).
+// ============================================================
+
+export interface PhenomenonTableRow {
+  /**
+   * L'aspect/élément du phénomène concerné (ex. "Dépenses publiques"),
+   * distinct de l'indicateur précis qui le mesure.
+   */
+  phenomenonElement: string;
+  indicator: string;
+  requiredData: string;
+  /**
+   * Nom/nature de la source envisagée (ex. "comptes de résultat de
+   * l'entreprise", "rapports budgétaires municipaux") — jamais une
+   * URL ou un organisme précis inventé. Chaîne vide si non déterminé.
+   */
+  source: string;
+  period: string;
+  geographicScope: string;
+  status: FieldConfidenceStatus;
+  /**
+   * Courte justification du statut retenu (ex. "proposé par ACADIA,
+   * jamais confirmé" / "cité par une source réelle trouvée en ligne").
+   */
+  provenance: string;
+  collectionProposal: string;
+}
+
+
+// ============================================================
+// CONTEXTE RÉELLEMENT SOURCÉ (recherche documentaire, Bloc B ; V3 —
+// équivalent du "phenomenonEvidence[]" de la mission : même concept,
+// même nom conservé pour ne pas dupliquer un champ existant)
+//
+// Distinct du raisonnement d'A1 : chaque élément provient d'une
+// vraie recherche web (voir lib/ai/openai/PhenomenonContextAI.ts),
+// jamais une déduction ou une proposition d'ACADIA — d'où la
+// provenance figée à "PROVENANT_D_UNE_SOURCE".
+// ============================================================
+
+export interface SourcedContextItem {
+  text: string;
+  sourceUrl: string;
+  sourceTitle: string;
+  provenance: "PROVENANT_D_UNE_SOURCE";
+}
+
+
+// ============================================================
+// PROVENANCE (mission Server Contracts & Research Persistence)
+//
+// Taxonomie GÉNÉRALE de "d'où vient cette information", utilisée au
+// niveau d'une VERSION d'analyse entière (ResearchAnalysisVersion,
+// voir plus bas) — distincte de FieldConfidenceStatus (qui répond à
+// "quelle est la fiabilité de CE champ", pas "quel type de source
+// l'a produit"). SourcedContextItem.provenance ("PROVENANT_D_UNE_SOURCE",
+// ci-dessus) reste inchangé pour compatibilité — il correspond
+// sémantiquement à WEB_SOURCE dans cette taxonomie plus large.
+// ============================================================
+
+export type ProvenanceTag =
+  | "SUBJECT"
+  | "USER_INPUT"
+  | "AI_INFERENCE"
+  | "AI_PROPOSAL"
+  | "DOCUMENT"
+  | "WEB_SOURCE"
+  | "DATABASE"
+  | "SYSTEM_RULE"
+  | "USER_VALIDATION";
+
+
+// ============================================================
+// VALIDATION D'UNE ANALYSE (mission Server Contracts & Research Persistence)
+//
+// Cycle de vie d'UNE VERSION d'analyse — distinct de ProposalStatus
+// (draft/proposed/accepted/rejected, utilisé pour chaque objet
+// scientifique individuel : variable, hypothèse, orientation
+// théorique...). "edited" n'est PAS déclenché automatiquement par les
+// éditeurs existants (setResearchQuestion, updateVariableStatus...) —
+// seule la génération d'une nouvelle version (deep-analysis) et la
+// validation/le rejet explicites (voir /api/research/[id]/understanding/validate)
+// font évoluer cet état dans cette mission ; le déclenchement fin par
+// champ reste une évolution future documentée dans le rapport.
+// ============================================================
+
+export type AnalysisValidationState =
+  | "generated"
+  | "edited"
+  | "validated"
+  | "rejected";
+
+
+// ============================================================
+// VERSION D'ANALYSE (mission Server Contracts & Research Persistence)
+//
+// Enveloppe versionnée de ce que produit une analyse en profondeur
+// (A1 + A2) — jamais écrasée : chaque exécution ajoute une nouvelle
+// entrée à ResearchProject.analysisHistory (même discipline que
+// statisticalRuns/scientificInterpretations/scientificConclusions,
+// déjà éprouvée dans ce projet — voir ResearchStateService.ts).
+// methodologyRecommendation et consistency ne sont JAMAIS stockés ici
+// : ce sont des fonctions pures de (project, understanding), toujours
+// recalculées à la lecture (voir ResearchAnalysisResponse.ts) — les
+// persister serait une duplication inutile de données dérivables.
+// ============================================================
+
+export interface ResearchAnalysisVersion {
+  id: string;
+  version: number;
+  /** Version dont celle-ci découle, absente pour la toute première. */
+  parentVersion?: number;
+  engineVersion?: string;
+  /** Modèle IA réellement utilisé pour produire cette version (voir ModelRouter). */
+  model?: string;
+  provenance: ProvenanceTag;
+  validation: AnalysisValidationState;
+  createdAt: string;
+  understanding: ResearchUnderstanding;
+  variables: ResearchVariable[];
+  relations: ResearchRelation[];
+  /**
+   * Hypothèses AJOUTÉES par cette version précisément (project.hypotheses
+   * reste la liste cumulative complète, jamais dupliquée ici).
+   */
+  hypothesesAdded: ResearchHypothesis[];
+}
+
+
+// ============================================================
 // STATUT D'UNE COMPRÉHENSION
 // ============================================================
 
@@ -493,6 +704,75 @@ export interface ResearchUnderstanding {
   confidence?: ConfidenceLevel;
 
   status?: UnderstandingStatus;
+
+  // ----------------------------------------------------------
+  // RESEARCH INTELLIGENCE V2 — produits par A1 (SubjectUnderstandingAI)
+  // ----------------------------------------------------------
+
+  /**
+   * Le phénomène observé — distinct de "problem" (l'écart/la
+   * difficulté) et de "summary". Jamais une reformulation du titre.
+   */
+  phenomenon?: string;
+
+  /**
+   * Classification multi-label du/des mode(s) de recherche (voir
+   * ResearchModeTag). Jamais une catégorie unique forcée.
+   */
+  researchModeTags?: ResearchModeTag[];
+
+  /**
+   * Fiabilité champ par champ (KNOWN/INFERRED/PROPOSED/MISSING/
+   * TO_VERIFY) — remplace la seule confiance globale là où une
+   * réponse plus fine est disponible.
+   */
+  fieldConfidence?: FieldConfidenceMap;
+
+  /**
+   * Tableau de structuration du phénomène (indicateur → donnée
+   * nécessaire → statut de disponibilité → période → proposition
+   * de collecte). Jamais des chiffres réels — voir PhenomenonTableRow.
+   */
+  phenomenonTable?: PhenomenonTableRow[];
+
+  // ----------------------------------------------------------
+  // RESEARCH INTELLIGENCE V3 — ferme la chaîne phénomène → problème
+  // → question de recherche → objectifs (voir mission V3, section 1)
+  // ----------------------------------------------------------
+
+  /**
+   * Question de recherche proposée par A1 — distincte de
+   * project.researchQuestions (la/les questions VALIDÉES par le
+   * chercheur, construites par ResearchCore). Toujours une
+   * proposition à confirmer, jamais auto-promue en question validée.
+   */
+  researchQuestion?: string;
+
+  /**
+   * Version du moteur A1 ayant produit cette compréhension —
+   * traçabilité lorsque le contrat évolue (voir SubjectUnderstandingAI.ts).
+   */
+  engineVersion?: string;
+}
+
+
+// ============================================================
+// ORIENTATION THÉORIQUE (analyse en profondeur, 10/09/2026)
+//
+// Une théorie proposée comme cadre possible pour la recherche —
+// jamais imposée, toujours à confronter à la littérature réelle.
+// ============================================================
+
+export interface TheoreticalOrientation {
+  id: string;
+
+  theory: string;
+
+  reason: string;
+
+  confidence: ConfidenceLevel;
+
+  status: ProposalStatus;
 }
 
 
@@ -765,6 +1045,37 @@ export interface ResearchProject {
   // ----------------------------------------------------------
 
   hypotheses: ResearchHypothesis[];
+
+  // ----------------------------------------------------------
+  // ORIENTATIONS THÉORIQUES (analyse en profondeur, 10/09/2026)
+  //
+  // Théories proposées comme pertinentes pour le sujet — toujours
+  // une PROPOSITION à confronter à la littérature réelle par le
+  // chercheur, jamais une affirmation que la théorie s'applique.
+  // ----------------------------------------------------------
+
+  theoreticalOrientations?: TheoreticalOrientation[];
+
+  // ----------------------------------------------------------
+  // CONTEXTE SOURCÉ (Research Intelligence V2) — éléments trouvés par
+  // PhenomenonContextAI lors de la preview sans compte, conservés à
+  // l'inscription au lieu d'être jetés (voir createResearchFromPreview,
+  // contexts/ResearchContext.tsx). Toujours distincts du raisonnement
+  // d'A1 : provenance figée à "PROVENANT_D_UNE_SOURCE".
+  // ----------------------------------------------------------
+
+  sourcedContext?: SourcedContextItem[];
+
+  // ----------------------------------------------------------
+  // HISTORIQUE DES VERSIONS D'ANALYSE (mission Server Contracts &
+  // Research Persistence) — additif, absent pour tout projet créé
+  // avant cette mission (voir ResearchAnalysisResponse.ts, qui
+  // synthétise une version 1 à partir de `understanding` pour ces
+  // projets, garantissant la compatibilité ascendante). Jamais
+  // écrasé : chaque analyse en profondeur AJOUTE une entrée.
+  // ----------------------------------------------------------
+
+  analysisHistory?: ResearchAnalysisVersion[];
 
   // ----------------------------------------------------------
   // MÉTHODOLOGIE

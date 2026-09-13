@@ -16,6 +16,8 @@ import { getSessionUser, unauthorized, forbidden, notFound } from "@/lib/supervi
 import { getResearchProjectRecord, appendScientificInterpretationRecord } from "@/lib/server/research/ResearchStateService";
 import { assessHypotheses } from "@/lib/core/analysis/HypothesisAssessmentEngine";
 import { logAudit } from "@/lib/server/audit/AuditLog";
+import { ensureEntitlement, EntitlementRequiredError } from "@/lib/server/billing/EntitlementService";
+import { getCatalogEntry, getEffectivePriceUsd } from "@/lib/server/billing/PricingConfig";
 import { z } from "zod";
 
 function readDatasetUpdatedAt(dataset: unknown): string {
@@ -38,6 +40,23 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (!record) return notFound();
   if (record.ownerId !== user.id) {
     return forbidden("Ce projet ne vous appartient pas.", { actorId: user.id, entityType: "ResearchProject", entityId: id });
+  }
+
+  // Mission Conversion + Pay-as-you-progress — "Interprétation 🔒".
+  try {
+    await ensureEntitlement(user.id, id, "INTERPRETATION");
+  } catch (error) {
+    if (error instanceof EntitlementRequiredError) {
+      return Response.json(
+        {
+          error: "Cette étape nécessite de débloquer « Interprétation scientifique ».",
+          entitlementRequired: getCatalogEntry(error.key),
+          priceUsd: getEffectivePriceUsd(error.key),
+        },
+        { status: 402 }
+      );
+    }
+    throw error;
   }
 
   if (!record.project.analysisPlan) {

@@ -24,9 +24,13 @@ import type {
   ResearchProject,
   ResearchDesignType,
   DataSourceType,
+  ResearchModeTag,
 } from "../research/ResearchTypes";
 
+import { NON_QUESTIONNAIRE_DOMINANT_TAGS } from "../research/ResearchModeTaxonomy";
+
 import { checkResearchConsistency } from "../research/ResearchConsistencyEngine";
+import { calculateSampleSize } from "./SamplingEngine";
 
 
 // ============================================================
@@ -49,9 +53,34 @@ export interface MethodologyRecommendation {
   sampleSize: RecommendationSection<number>;
   collection: RecommendationSection<string[]>;
   dataSourceType: RecommendationSection<DataSourceType>;
+  /**
+   * Research Intelligence V3 — instrument de collecte recommandé
+   * (questionnaire / guide d'entretien / états financiers / données
+   * administratives...), déduit des researchModeTags produits par
+   * A1. Toujours une proposition (jamais imposée) : le chercheur
+   * choisit ses propres techniques/instruments via "Modifier".
+   */
+  recommendedInstrument: RecommendationSection<string>;
   analysisPlan: string[];
   toValidate: string[];
   readinessPercent: number;
+  /**
+   * P16 (Bloc G) — limites méthodologiques déterministes, dérivées
+   * uniquement de choix déjà connus (taille d'échantillon non
+   * calculée, échantillonnage non probabiliste, devis
+   * descriptif/transversal...). Jamais une difficulté de terrain
+   * spécifique inventée pour ce projet (accès aux données,
+   * contraintes locales...) — seulement ce qui découle logiquement
+   * de la méthodologie déjà choisie.
+   */
+  limitations: string[];
+  /**
+   * P16 (Bloc G) — rappels déontologiques standards pour une
+   * collecte de données de recherche (consentement, confidentialité,
+   * neutralité scientifique, usage académique) — pas propres à ce
+   * projet, universels dès qu'une collecte primaire est envisagée.
+   */
+  ethicalConsiderations: string[];
   /**
    * P15 — note pédagogique dérivée du niveau d'étude renseigné
    * (`project.level`). Le niveau Master n'est jamais présenté
@@ -68,6 +97,86 @@ export interface MethodologyRecommendation {
 
 function clean(value?: string | null): string {
   return (value ?? "").replace(/\s+/g, " ").trim();
+}
+
+// ============================================================
+// INSTRUMENT DE COLLECTE RECOMMANDÉ À PARTIR DES SEULS MODE TAGS
+// (mission Preview WOW)
+//
+// Fonction pure, déterministe, sans dépendance à un ResearchProject
+// complet — utilisable dès la preview anonyme (A1 seul, avant tout
+// A2/variables). buildMethodologyRecommendation() (plus bas, qui
+// dispose d'un projet complet) l'appelle aussi, pour ne jamais avoir
+// deux logiques de décision différentes selon le moment du parcours.
+// ============================================================
+
+export function recommendInstrumentFromModeTags(
+  modeTags: ResearchModeTag[]
+): RecommendationSection<string> {
+  if (modeTags.length === 0) {
+    return {
+      status: "needs_review",
+      justification: "ACADIA ne peut pas encore recommander d'instrument : aucun mode de recherche n'est identifié pour ce sujet.",
+    };
+  }
+
+  const hasTag = (tag: ResearchModeTag) => modeTags.includes(tag);
+  const isFinancial = hasTag("FINANCIAL_ANALYSIS");
+  const isSecondary = hasTag("SECONDARY_DATA");
+  const isQuantitative = hasTag("QUANTITATIVE_SURVEY");
+  const isQualitative = hasTag("QUALITATIVE");
+  const isMixed = hasTag("MIXED_METHOD");
+  const isCaseStudyOnly = hasTag("CASE_STUDY") && !isFinancial && !isSecondary && !isQuantitative && !isQualitative && !isMixed;
+
+  if (isMixed || (isQuantitative && isQualitative)) {
+    return {
+      value: "Questionnaire structuré + guide d'entretien",
+      status: "needs_review",
+      justification: "Le sujet combine une composante quantitative et une composante qualitative — un instrument pour chaque volet est proposé, à confirmer par le chercheur.",
+    };
+  }
+
+  if (isFinancial) {
+    return {
+      value: "États financiers (bilan, compte de résultat) de l'entité étudiée",
+      status: "needs_review",
+      justification: "Le sujet porte sur une analyse financière — l'instrument principal est documentaire (états financiers), pas un questionnaire.",
+    };
+  }
+
+  if (isSecondary) {
+    return {
+      value: "Données administratives / documentation existante",
+      status: "needs_review",
+      justification: "Le sujet repose sur des données déjà produites par des tiers — l'instrument principal est la collecte documentaire, pas un questionnaire.",
+    };
+  }
+
+  if (isQualitative) {
+    return {
+      value: "Guide d'entretien",
+      status: "needs_review",
+      justification: "Le sujet vise à comprendre un vécu ou une expérience — un guide d'entretien est l'instrument adapté, pas un questionnaire quantitatif.",
+    };
+  }
+
+  if (isQuantitative) {
+    return {
+      value: "Questionnaire structuré",
+      status: "needs_review",
+      justification: "Le sujet appelle une mesure auprès d'une population — un questionnaire structuré est l'instrument adapté.",
+    };
+  }
+
+  if (isCaseStudyOnly) {
+    return {
+      value: "Étude documentaire du cas (entretiens et/ou documents internes selon l'accès)",
+      status: "needs_review",
+      justification: "Le sujet porte sur un cas précis sans mode de collecte encore déterminé — l'instrument dépendra de l'accès réel aux données de ce cas.",
+    };
+  }
+
+  return { status: "needs_review" };
 }
 
 const CAUSAL_LEANING_RELATIONS = new Set([
@@ -138,6 +247,14 @@ export function buildMethodologyRecommendation(
       CAUSAL_LEANING_RELATIONS.has(relation.relation)
   );
 
+  // Research Intelligence V2 — le(s) mode(s) de recherche identifié(s)
+  // par A1 (voir SubjectUnderstandingAI.ts) permettent de sortir de la
+  // seule dichotomie descriptive/explicative. Moteur toujours
+  // déterministe : aucun appel IA ici, seulement une lecture des tags
+  // déjà produits par A1.
+  const modeTags: ResearchModeTag[] = project.understanding?.researchModeTags ?? [];
+  const hasTag = (tag: ResearchModeTag) => modeTags.includes(tag);
+
   let researchDesignType: RecommendationSection<ResearchDesignType>;
 
   if (hasHypotheses && hasCausalLeaningRelation) {
@@ -146,6 +263,32 @@ export function buildMethodologyRecommendation(
       status: "proposed",
       justification:
         "Une hypothèse relie explicitement des variables par une relation orientée — la recherche semble viser à expliquer un phénomène plutôt qu'à seulement le décrire. Cette relation reste à démontrer, pas à supposer acquise.",
+    };
+  } else if (hasTag("COMPARATIVE")) {
+    researchDesignType = {
+      value: "comparative",
+      status: "needs_review",
+      justification:
+        "La compréhension du sujet fait ressortir une dimension comparative (entre groupes, périodes ou cas) — ce devis reste à confirmer par le chercheur, pas encore une décision acquise.",
+    };
+  } else if (hasTag("CORRELATIONAL") && (project.relations ?? []).length > 0) {
+    researchDesignType = {
+      value: "correlationnelle",
+      status: "needs_review",
+      justification:
+        "Une relation mesurable entre variables a été identifiée, sans hypothèse à tendance causale à ce stade — un devis corrélationnel est la posture la plus prudente, à confirmer par le chercheur.",
+    };
+  } else if (
+    hasTag("QUALITATIVE") &&
+    !hasHypotheses &&
+    !hasTag("QUANTITATIVE_SURVEY") &&
+    !hasTag("MIXED_METHOD")
+  ) {
+    researchDesignType = {
+      value: "exploratoire",
+      status: "needs_review",
+      justification:
+        "Le sujet vise à comprendre un vécu, une expérience ou un sens plutôt qu'à mesurer une relation entre variables — un devis exploratoire est généralement adapté à ce stade, à confirmer par le chercheur.",
     };
   } else if (project.variables.length > 0) {
     researchDesignType = {
@@ -175,33 +318,71 @@ export function buildMethodologyRecommendation(
   };
 
   // ----------------------------------------------------------
-  // P3.4 — ÉCHANTILLON
+  // P3.4 — ÉCHANTILLON (Bloc G, 11/09/2026)
   //
-  // Jamais calculé automatiquement ici (SamplingEngine existe
-  // déjà et reste la seule source de calcul, invoquée ailleurs
-  // sur décision explicite). On ne fait que rapporter ce qui est
-  // déjà connu.
+  // Si le chercheur a déjà renseigné une taille de population
+  // (methodology.populationSize — champ existant, jusqu'ici jamais
+  // exploité ici), ACADIA propose désormais un calcul réel via
+  // SamplingEngine.calculateSampleSize (formule de Yamane,
+  // déterministe, aucune invention). Si la population n'a pas de
+  // taille connue (cas fréquent : population non probabiliste,
+  // accès difficile), ACADIA ne calcule jamais un chiffre — il
+  // propose la voie méthodologique correcte dans ce cas :
+  // l'échantillonnage non probabiliste (raisonné), justifié par
+  // des critères de sélection plutôt que par un calcul statistique
+  // — cohérent avec les mémoires de référence où la population
+  // n'est pas dénombrable.
   // ----------------------------------------------------------
 
-  const samplingMethod: RecommendationSection<string> = {
-    value: clean(methodology?.samplingMethod) || undefined,
-    status: methodology?.samplingMethod ? "proposed" : "needs_review",
-    justification:
-      clean(methodology?.samplingJustification) ||
-      (!populationValue
-        ? "ACADIA ne propose pas de technique d'échantillonnage tant que la population d'étude n'est pas renseignée."
-        : undefined),
-  };
+  const knownPopulationSize =
+    methodology?.populationSize && methodology.populationSize > 0
+      ? methodology.populationSize
+      : undefined;
 
-  const sampleSize: RecommendationSection<number> = {
-    value: methodology?.sampleSize,
-    status: methodology?.sampleSize ? "proposed" : "needs_review",
-    justification: !methodology?.sampleSize
-      ? !populationValue
-        ? "ACADIA ne propose pas de taille d'échantillon car la taille de la population n'est pas encore connue."
-        : "La taille d'échantillon n'est pas encore calculée pour cette population."
-      : undefined,
-  };
+  const computedSampling = knownPopulationSize
+    ? calculateSampleSize(knownPopulationSize)
+    : undefined;
+
+  const samplingMethod: RecommendationSection<string> = methodology?.samplingMethod
+    ? {
+        value: clean(methodology.samplingMethod),
+        status: "proposed",
+        justification: clean(methodology.samplingJustification) || undefined,
+      }
+    : !populationValue
+    ? {
+        status: "needs_review",
+        justification:
+          "ACADIA ne propose pas de technique d'échantillonnage tant que la population d'étude n'est pas renseignée.",
+      }
+    : knownPopulationSize
+    ? {
+        value: "Échantillonnage probabiliste (aléatoire simple ou systématique)",
+        status: "needs_review",
+        justification:
+          "La taille de la population étant connue, un tirage probabiliste est possible. Cette technique reste une proposition à confirmer ou à remplacer par le chercheur (stratifié, en grappes...) selon l'accès réel au terrain.",
+      }
+    : {
+        value: "Échantillonnage non probabiliste (raisonné / à choix raisonné)",
+        status: "needs_review",
+        justification:
+          "La taille de la population d'étude n'est pas connue avec précision (population difficile à dénombrer) : un tirage probabiliste n'est pas réalisable. ACADIA propose un échantillonnage raisonné, où les répondants sont sélectionnés selon des critères explicites (disponibilité, connaissance du sujet, accessibilité) — à confirmer et à justifier par le chercheur, jamais un remplacement du calcul statistique par une estimation inventée.",
+      };
+
+  const sampleSize: RecommendationSection<number> = methodology?.sampleSize
+    ? { value: methodology.sampleSize, status: "proposed" }
+    : computedSampling?.sampleSize
+    ? {
+        value: computedSampling.sampleSize,
+        status: "needs_review",
+        justification: `${computedSampling.explanation} (${computedSampling.method}, marge d'erreur ${computedSampling.marginOfError} %, niveau de confiance ${computedSampling.confidenceLevel} %). Proposition à confirmer par le chercheur — ACADIA ne l'impose pas.`,
+      }
+    : {
+        status: "needs_review",
+        justification: !populationValue
+          ? "ACADIA ne propose pas de taille d'échantillon car la population d'étude n'est pas encore renseignée."
+          : "La taille de la population n'étant pas connue avec précision, ACADIA ne peut pas calculer statistiquement une taille d'échantillon. Avec un échantillonnage raisonné, la taille se justifie par des critères de saturation/accessibilité plutôt que par une formule — précisez et justifiez le nombre de répondants retenu.",
+      };
 
   // ----------------------------------------------------------
   // P3.5 — COLLECTE
@@ -252,6 +433,20 @@ export function buildMethodologyRecommendation(
   }
 
   // ----------------------------------------------------------
+  // RESEARCH INTELLIGENCE V3 — INSTRUMENT DE COLLECTE RECOMMANDÉ
+  //
+  // Déduit des researchModeTags (A1) — jamais un questionnaire par
+  // défaut. Reste une proposition ("proposed"/"needs_review"), jamais
+  // imposée : le chercheur choisit ses propres instruments via
+  // "Modifier" (methodology.instruments reste le champ qui compte).
+  // Extrait en fonction autonome (mission Preview WOW) : réutilisée
+  // telle quelle par la preview anonyme, qui n'a pas encore de
+  // ResearchProject complet (voir recommendInstrumentFromModeTags).
+  // ----------------------------------------------------------
+
+  const recommendedInstrument = recommendInstrumentFromModeTags(modeTags);
+
+  // ----------------------------------------------------------
   // P3.8 — PRÉPARATION ÉCONOMÉTRIQUE (réutilise le readiness
   // déjà calculé par ResearchConsistencyEngine — pas de logique
   // dupliquée, aucun calcul statistique ici).
@@ -287,6 +482,62 @@ export function buildMethodologyRecommendation(
     : undefined;
 
   // ----------------------------------------------------------
+  // P16 (Bloc G) — LIMITES MÉTHODOLOGIQUES
+  //
+  // Uniquement des conséquences logiques de choix déjà connus,
+  // jamais une difficulté de terrain propre à ce projet (accès aux
+  // données, contraintes locales...) qu'ACADIA ne peut pas
+  // connaître sans que le chercheur ne la formule lui-même.
+  // ----------------------------------------------------------
+
+  const limitations: string[] = [];
+
+  if (!knownPopulationSize) {
+    limitations.push(
+      "La taille exacte de la population d'étude n'étant pas connue, la représentativité statistique de l'échantillon ne peut pas être garantie par un calcul probabiliste — les résultats devront être interprétés comme des tendances observées sur l'échantillon étudié, non généralisées automatiquement à l'ensemble de la population."
+    );
+  } else if (sampleSize.status === "needs_review") {
+    limitations.push(
+      "La taille d'échantillon reste à confirmer par le chercheur avant la collecte — sans confirmation, la marge d'erreur annoncée par ACADIA n'est qu'une proposition, pas une garantie."
+    );
+  }
+
+  if (samplingMethod.value?.toLowerCase().includes("non probabiliste")) {
+    limitations.push(
+      "L'échantillonnage non probabiliste envisagé limite la portée des résultats : ils décrivent l'échantillon interrogé et ne peuvent pas être généralisés avec une marge d'erreur statistique à l'ensemble de la population, contrairement à un tirage aléatoire."
+    );
+  }
+
+  if (researchDesignType.value === "descriptive") {
+    limitations.push(
+      "Le devis descriptif retenu à ce stade permet de décrire les variables étudiées mais ne permet pas, en l'état, d'établir une relation de causalité entre elles."
+    );
+  }
+
+  if (
+    (methodology?.techniques ?? []).some((t) => clean(t).toLowerCase().includes("questionnaire")) ||
+    (methodology?.techniques ?? []).some((t) => clean(t).toLowerCase().includes("entretien"))
+  ) {
+    limitations.push(
+      "Les données étant recueillies auprès des répondants eux-mêmes (questionnaire/entretien), elles peuvent comporter un biais déclaratif (perception subjective, désirabilité sociale) à prendre en compte dans l'interprétation."
+    );
+  }
+
+  // ----------------------------------------------------------
+  // P16 (Bloc G) — CONSIDÉRATIONS ÉTHIQUES
+  //
+  // Rappels déontologiques universels pour une collecte de
+  // données de recherche — pas des faits propres à ce projet.
+  // ----------------------------------------------------------
+
+  const ethicalConsiderations: string[] = [
+    "Consentement éclairé : chaque participant doit être informé de l'objectif de l'étude et de l'usage exclusivement académique des données avant de répondre, et sa participation doit rester volontaire.",
+    "Confidentialité et anonymat : les réponses individuelles ne doivent permettre d'identifier personne dans le mémoire ; les données doivent être traitées et présentées de manière agrégée ou anonymisée.",
+    "Neutralité scientifique : les résultats doivent être rapportés tels qu'observés, y compris lorsqu'ils infirment une hypothèse — jamais orientés pour confirmer une attente du chercheur.",
+    "Respect des sources : toute donnée, statistique ou théorie empruntée à un tiers doit être référencée conformément aux normes académiques, pour éviter tout plagiat.",
+  ];
+
+  // ----------------------------------------------------------
   // ÉLÉMENTS À VALIDER PAR LE CHERCHEUR
   // ----------------------------------------------------------
 
@@ -306,6 +557,25 @@ export function buildMethodologyRecommendation(
   }
   if (dataSourceType.status === "needs_review") {
     toValidate.push("Nature des sources de données à préciser");
+  }
+
+  // Research Intelligence V2 — ne force jamais un questionnaire quand
+  // le sujet semble reposer principalement sur des données
+  // financières/secondaires (voir NON_QUESTIONNAIRE_DOMINANT_TAGS).
+  // Reste une note à valider, jamais un blocage : le chercheur garde
+  // la main pour générer un questionnaire malgré tout s'il le juge
+  // utile (ex. volet mixte non encore tagué comme tel par A1).
+  const hasNonQuestionnaireDominantTag = NON_QUESTIONNAIRE_DOMINANT_TAGS.some((tag) =>
+    modeTags.includes(tag)
+  );
+  if (
+    hasNonQuestionnaireDominantTag &&
+    !hasTag("QUANTITATIVE_SURVEY") &&
+    !hasTag("MIXED_METHOD")
+  ) {
+    toValidate.push(
+      "Un questionnaire n'est peut-être pas l'outil de collecte principal ici — le sujet semble reposer sur des données financières ou déjà existantes plutôt que sur une enquête. Voir le tableau des données nécessaires dans la compréhension du sujet."
+    );
   }
 
   // ----------------------------------------------------------
@@ -333,9 +603,12 @@ export function buildMethodologyRecommendation(
     sampleSize,
     collection,
     dataSourceType,
+    recommendedInstrument,
     analysisPlan,
     toValidate,
     readinessPercent,
     levelGuidance,
+    limitations,
+    ethicalConsiderations,
   };
 }

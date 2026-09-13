@@ -7,6 +7,7 @@ import { GraduationCap, Presentation, UserPlus, ArrowLeft, Eye, EyeOff, Loader2 
 import AuthShell from "@/components/auth/AuthShell";
 import { useAuth } from "@/contexts/AuthContext";
 import ResearchPrimaryButton from "@/components/research/ResearchWizard/brand/ResearchPrimaryButton";
+import { PENDING_PREVIEW_KEY } from "@/lib/client/previewStorage";
 
 // ============================================================
 // P17 — Le rôle se choisit désormais AU MOMENT de l'inscription
@@ -127,7 +128,21 @@ function RegisterForm() {
         setError(result.error);
         return;
       }
-      redirectAfterAuth(role === "supervisor" ? "/dashboard/supervisor?onboarding=1" : "/dashboard?onboarding=1");
+      const hasPendingPreview = role === "student" && (() => {
+        try {
+          return Boolean(sessionStorage.getItem(PENDING_PREVIEW_KEY));
+        } catch {
+          return false;
+        }
+      })();
+
+      redirectAfterAuth(
+        hasPendingPreview
+          ? "/dashboard/preview-resume"
+          : role === "supervisor"
+            ? "/dashboard/supervisor?onboarding=1"
+            : "/dashboard?onboarding=1"
+      );
     } finally {
       setSubmitting(false);
     }

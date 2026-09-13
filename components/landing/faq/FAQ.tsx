@@ -1,5 +1,6 @@
 import { faq } from "../../../data/faq";
 import FAQItem from "./FAQItem";
+import Reveal from "../Reveal";
 
 export default function FAQ() {
   return (
@@ -8,13 +9,13 @@ export default function FAQ() {
 
         {/* Header */}
 
-        <div className="text-center">
+        <Reveal className="text-center">
 
-          <span className="rounded-full bg-blue-100 px-5 py-2 text-sm font-semibold text-blue-700">
+          <span className="rounded-full bg-acadia-blue-50 px-5 py-2 text-sm font-semibold text-acadia-blue">
             QUESTIONS FRÉQUENTES
           </span>
 
-          <h2 className="mt-8 text-5xl font-black leading-tight text-slate-900">
+          <h2 className="mt-8 text-5xl font-black leading-tight text-acadia-navy">
             Tout ce que vous devez savoir
             <br />
             avant de commencer.
@@ -22,21 +23,22 @@ export default function FAQ() {
 
           <p className="mx-auto mt-8 max-w-3xl text-xl leading-9 text-slate-600">
             Nous répondons aux questions les plus fréquentes afin de
-            vous permettre d'utiliser ACADIA en toute confiance.
+            vous permettre d&apos;utiliser ACADIA en toute confiance.
           </p>
 
-        </div>
+        </Reveal>
 
         {/* Questions */}
 
         <div className="mt-20 space-y-6">
 
-          {faq.map((item) => (
-            <FAQItem
-              key={item.question}
-              question={item.question}
-              answer={item.answer}
-            />
+          {faq.map((item, index) => (
+            <Reveal key={item.question} delayMs={(index % 6) * 60}>
+              <FAQItem
+                question={item.question}
+                answer={item.answer}
+              />
+            </Reveal>
           ))}
 
         </div>

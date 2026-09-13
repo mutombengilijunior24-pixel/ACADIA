@@ -49,8 +49,7 @@ export default function Navbar() {
 
           <Link
             href="/register"
-            className="hidden rounded-xl px-6 py-3 font-semibold text-white transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl sm:block"
-            style={{ background: "linear-gradient(135deg, #2554EB 0%, #0B1B3A 130%)" }}
+            className="bg-acadia-gradient hidden rounded-xl px-6 py-3 font-semibold text-white transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl sm:block"
           >
             Commencer
           </Link>
@@ -94,8 +93,7 @@ export default function Navbar() {
             </Link>
             <Link
               href="/register"
-              className="rounded-xl px-4 py-2.5 text-center font-semibold text-white"
-              style={{ background: "linear-gradient(135deg, #2554EB 0%, #0B1B3A 130%)" }}
+              className="bg-acadia-gradient rounded-xl px-4 py-2.5 text-center font-semibold text-white"
             >
               Commencer ma recherche
             </Link>

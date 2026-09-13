@@ -1,19 +1,20 @@
 import CTAButtons from "./CTAButtons";
 import CTAFeatures from "./CTAFeatures";
+import Reveal from "../Reveal";
 
 export default function CTA() {
   return (
     <section className="py-32 px-6">
 
-      <div
+      <Reveal
         className="
           relative
           overflow-hidden
           rounded-[48px]
           bg-gradient-to-br
-          from-blue-700
-          via-indigo-700
-          to-slate-950
+          from-acadia-blue
+          via-acadia-blue-dark
+          to-acadia-navy
           px-10
           py-24
           shadow-2xl
@@ -22,7 +23,7 @@ export default function CTA() {
 
         {/* Halo */}
 
-        <div className="absolute -left-24 -top-24 h-72 w-72 rounded-full bg-cyan-400/20 blur-3xl" />
+        <div className="absolute -left-24 -top-24 h-72 w-72 rounded-full bg-acadia-blue-light/20 blur-3xl" />
 
         <div className="absolute -right-24 bottom-0 h-80 w-80 rounded-full bg-white/10 blur-3xl" />
 
@@ -58,7 +59,7 @@ export default function CTA() {
           </h2>
 
           <p className="mx-auto mt-10 max-w-3xl text-xl leading-9 text-blue-100">
-            Aujourd'hui, transformez cette idée en une recherche
+            Aujourd&apos;hui, transformez cette idée en une recherche
             scientifique structurée, rigoureuse et prête à être soutenue.
           </p>
 
@@ -81,7 +82,7 @@ export default function CTA() {
 
         </div>
 
-      </div>
+      </Reveal>
 
     </section>
   );

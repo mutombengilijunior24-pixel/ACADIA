@@ -153,6 +153,7 @@ export function checkResearchConsistency(
       severity: "warning",
       title: "Question de recherche non formulée",
       message: "Aucune question de recherche explicite n'est encore rattachée au projet.",
+      suggestion: "Écrire la question de recherche dans la section \"Question & objectifs\".",
     });
   } else {
     push({
@@ -176,6 +177,7 @@ export function checkResearchConsistency(
       severity: "error",
       title: "Objectif général manquant",
       message: "Aucun objectif général n'est défini.",
+      suggestion: "Écrire l'objectif général dans la section \"Question & objectifs\".",
     });
   } else {
     push({
@@ -192,6 +194,7 @@ export function checkResearchConsistency(
       severity: "warning",
       title: "Objectifs spécifiques absents",
       message: "Aucun objectif spécifique n'est encore défini.",
+      suggestion: "Ajouter au moins un objectif spécifique dans la section \"Question & objectifs\".",
     });
   } else {
     push({
@@ -222,6 +225,7 @@ export function checkResearchConsistency(
       severity: "warning",
       title: "Aucune variable identifiée",
       message: "Les variables de recherche ne sont pas encore identifiées.",
+      suggestion: "Lancer l'analyse en profondeur pour qu'ACADIA propose des variables à partir du sujet.",
     });
   } else {
     push({
@@ -624,6 +628,95 @@ export function checkResearchConsistency(
       title: "Hypothèse sans variable dépendante",
       message: "Une hypothèse existe mais aucune variable dépendante n'est identifiée.",
     });
+  }
+
+  // ==========================================================
+  // CHECKS I-K — RESEARCH INTELLIGENCE V3
+  //
+  // Règles déterministes supplémentaires exploitant les tags de mode
+  // et le tableau de phénomène produits par A1 — toujours structurel,
+  // aucune décision IA : l'IA ne doit pas être seule juge de la
+  // cohérence de ce qu'elle propose.
+  // ==========================================================
+
+  const understanding = project.understanding;
+  const modeTags = understanding?.researchModeTags ?? [];
+
+  // CHECK I — Mode qualitatif ↔ questionnaire recommandé
+  const isQualitativeOnly =
+    modeTags.includes("QUALITATIVE") &&
+    !modeTags.includes("QUANTITATIVE_SURVEY") &&
+    !modeTags.includes("MIXED_METHOD");
+
+  if (
+    isQualitativeOnly &&
+    (methodology?.instruments ?? []).some((i) => clean(i).toLowerCase().includes("questionnaire"))
+  ) {
+    push({
+      category: "Méthodologie",
+      severity: "warning",
+      title: "Questionnaire recommandé pour une recherche qualitative",
+      message: "ACADIA a identifié ce sujet comme purement qualitatif (aucun tag QUANTITATIVE_SURVEY ni MIXED_METHOD), mais un questionnaire figure parmi les instruments déclarés.",
+      suggestion: "Vérifier si un guide d'entretien ne serait pas plus adapté, ou confirmer explicitement une composante quantitative.",
+    });
+  }
+
+  // CHECK J — Tableau du phénomène : statut SOURCED sans source citée
+  //
+  // "SOURCED" ne doit jamais qualifier une donnée sans provenance
+  // réelle — sinon le tableau présente une proposition comme un fait
+  // documenté (voir mission V3 §10, dernier exemple).
+  for (const row of understanding?.phenomenonTable ?? []) {
+    if (row.status === "SOURCED" && !clean(row.source)) {
+      push({
+        category: "Phénomène",
+        severity: "error",
+        title: `Élément "${row.indicator}" marqué SOURCED sans source citée`,
+        message: "Une ligne du tableau de structuration du phénomène est marquée comme sourcée (SOURCED) sans qu'aucune source ne soit renseignée.",
+        suggestion: "Renseigner la source réelle, ou revenir à un statut TO_VERIFY/MISSING tant qu'aucune source n'est confirmée.",
+      });
+    }
+  }
+
+  // CHECK K — Variable potentiellement incohérente avec le sujet
+  //
+  // Heuristique structurelle légère (mots partagés avec les concepts/
+  // phénomène/problème identifiés par A1) — ne juge jamais la
+  // pertinence scientifique, seulement un décrochage lexical total
+  // qui mérite d'être vérifié par le chercheur, jamais bloquant.
+  const subjectVocabulary = new Set(
+    [
+      ...(understanding?.mainConcepts ?? []),
+      understanding?.phenomenon ?? "",
+      understanding?.problem ?? "",
+      project.title ?? "",
+    ]
+      .join(" ")
+      .toLowerCase()
+      .split(/[^a-zàâçéèêëîïôûùüÿñæœ0-9]+/)
+      .filter((word) => word.length >= 4)
+  );
+
+  if (subjectVocabulary.size > 0) {
+    for (const variable of project.variables) {
+      const variableWords = clean(variable.name)
+        .toLowerCase()
+        .split(/[^a-zàâçéèêëîïôûùüÿñæœ0-9]+/)
+        .filter((word) => word.length >= 4);
+
+      const hasOverlap = variableWords.some((word) => subjectVocabulary.has(word));
+
+      if (variableWords.length > 0 && !hasOverlap) {
+        push({
+          category: "Variables",
+          severity: "needs_review",
+          title: `Variable "${variable.name}" potentiellement incohérente avec le sujet`,
+          message: `Aucun mot de la variable "${variable.name}" ne se retrouve dans le sujet, le phénomène ou les concepts identifiés par ACADIA.`,
+          relatedVariableId: variable.id,
+          suggestion: "Vérifier que cette variable correspond bien au sujet étudié.",
+        });
+      }
+    }
   }
 
   // ==========================================================

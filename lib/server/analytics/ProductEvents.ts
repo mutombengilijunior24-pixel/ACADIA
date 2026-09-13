@@ -26,6 +26,7 @@ export const PRODUCT_EVENT_TYPES = [
   "VARIABLES_GENERATED",
   "METHODOLOGY_STARTED",
   "METHODOLOGY_COMPLETED",
+  "METHODOLOGY_EDITED",
   "QUESTIONNAIRE_GENERATION_STARTED",
   "QUESTIONNAIRE_EDITED",
   "PUBLIC_SURVEY_OPENED",
@@ -36,6 +37,27 @@ export const PRODUCT_EVENT_TYPES = [
   "FEEDBACK_SUBMITTED",
   "BUG_REPORTED",
   "FEATURE_REQUESTED",
+  "SUBJECT_SUBMITTED",
+  "PREVIEW_REQUESTED",
+  "PREVIEW_GENERATED",
+  "PREVIEW_FAILED",
+  "PREVIEW_ACCEPTED",
+  "PREVIEW_EDITED",
+  "ACCOUNT_CREATED_AFTER_PREVIEW",
+  "PHENOMENON_EVIDENCE_FETCHED",
+
+  // Conversion + Pay-as-you-progress (mission dédiée) — voir
+  // lib/server/billing/EntitlementService.ts, seul émetteur de ces
+  // événements.
+  "PAYWALL_VIEWED",
+  "UNLOCK_CLICKED",
+  "CHECKOUT_STARTED",
+  "PAYMENT_SUCCEEDED",
+  "PAYMENT_FAILED",
+  "ENTITLEMENT_GRANTED",
+  "STAGE_STARTED",
+  "STAGE_COMPLETED",
+  "STAGE_ABANDONED",
 ] as const;
 
 export type ProductEventType = (typeof PRODUCT_EVENT_TYPES)[number];
@@ -57,6 +79,11 @@ export const PUBLIC_PRODUCT_EVENT_TYPES: readonly ProductEventType[] = [
   "PUBLIC_SURVEY_OPENED",
   "PUBLIC_SURVEY_STARTED",
   "PUBLIC_SURVEY_COMPLETED",
+  // Entonnoir preview sans compte (MVP simplification, 10/09/2026) —
+  // déclenchés avant toute session par app/apercu/page.tsx.
+  "SUBJECT_SUBMITTED",
+  "PREVIEW_ACCEPTED",
+  "PREVIEW_EDITED",
 ];
 
 export interface TrackProductEventInput {
