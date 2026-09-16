@@ -63,6 +63,15 @@ const DEFAULT_COMPLEXITY_BY_OPERATION: Record<AIOperation, AIComplexity> = {
   DOCUMENT_ANALYSIS: "STANDARD",
   INTERPRETATION: "STANDARD",
   CONCLUSION: "STANDARD",
+  // Correction sémantique d'une copie (question + expectedAnswer +
+  // rubric + réponse étudiant) — comparable en complexité à une analyse
+  // de variable, jamais économique par défaut (mission Academic
+  // Assessment Core §23 — aucun moteur réel ne l'appelle encore).
+  ASSESSMENT_GRADING: "STANDARD",
+  WRITING: "STANDARD",
+  // Extraction de métadonnées depuis un texte fourni — comparable à
+  // DOCUMENT_ANALYSIS (mission Bibliography & Reference Intelligence).
+  REFERENCE_ANALYSIS: "STANDARD",
   OTHER: "STANDARD",
 };
 

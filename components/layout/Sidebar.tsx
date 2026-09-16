@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import {
   LayoutDashboard,
@@ -13,10 +14,19 @@ import {
   X,
   GraduationCap,
   BarChart3,
+  ClipboardCheck,
+  BookOpenCheck,
 } from "lucide-react";
 import Logo from "@/components/shared/Logo";
 import { useAuth } from "@/contexts/AuthContext";
 
+// Retour utilisateur (test réel de l'Espace enseignant + de Mes TP) :
+// la navigation est strictement exclusive entre les deux — un
+// enseignant ne voit JAMAIS "Mes TP" (non pertinent pour lui), et
+// symétriquement seul un non-enseignant voit "Mes TP" (voir mémoire
+// navigation-role-aware-not-universal.md). Vérifié via
+// /api/assessment/teacher/status, jamais supposé depuis user.role
+// (aucune valeur "teacher" n'existe dans UserRole).
 const menuItems = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { title: "Mes recherches", href: "/dashboard/research", icon: FileSearch },
@@ -28,9 +38,35 @@ export default function Sidebar({ mobileOpen = false, onClose }: { mobileOpen?: 
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
+  const [isTeacher, setIsTeacher] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      if (!user) {
+        if (!cancelled) setIsTeacher(false);
+        return;
+      }
+      try {
+        const res = await fetch("/api/assessment/teacher/status");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) setIsTeacher(!!data.isTeacher);
+      } catch {
+        // Silencieux : en cas d'échec réseau, le lien reste simplement masqué — jamais une erreur bloquante pour la navigation.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   const items = [
-    ...menuItems,
+    ...menuItems.slice(0, 2),
+    ...(isTeacher
+      ? [{ title: "Espace enseignant", href: "/dashboard/teacher", icon: ClipboardCheck }]
+      : [{ title: "Mes TP", href: "/dashboard/mes-tp", icon: BookOpenCheck }]),
+    ...menuItems.slice(2),
     ...(user?.role === "supervisor" ? [{ title: "Espace directeur", href: "/dashboard/supervisor", icon: GraduationCap }] : []),
     ...(user?.role === "admin" ? [{ title: "Produit", href: "/dashboard/admin/product", icon: BarChart3 }] : []),
   ];

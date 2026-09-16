@@ -46,8 +46,14 @@ model User {
 
   studentProfile    StudentProfile?
   supervisorProfile SupervisorProfile?
+  // Academic Assessment (mission dédiée) — distinct de supervisorProfile
+  // (supervision de thèse) : un enseignant TP/TD/examen n'est pas
+  // nécessairement un superviseur de mémoire, même s'il peut arriver
+  // qu'une même personne cumule les deux rôles via deux profils distincts.
+  teacherProfile    TeacherProfile?
   resetTokens       PasswordResetToken[]
   researchProjects  ResearchProject[]    @relation("ResearchOwner")
+  cohortMemberships CohortMembership[]   @relation("CohortMembershipStudent")
 
   canevasList             SupervisionCanevas[]    @relation("CanevasSupervisor")
   invitationsSent         SupervisorInvitation[]  @relation("InvitationSupervisor")
@@ -67,6 +73,10 @@ model User {
   productFeedback ProductFeedback[] @relation("ProductFeedbackUser")
   bugReports      BugReport[]       @relation("BugReportUser")
   featureRequests FeatureRequest[]  @relation("FeatureRequestUser")
+
+  // Academic Assessment (mission dédiée)
+  assignmentsAsTeacher   Assignment[]           @relation("AssignmentTeacher")
+  assessmentSubmissions  AssessmentSubmission[] @relation("AssessmentSubmissionStudent")
 
   @@index([role])
 }
@@ -153,7 +163,139 @@ model ResearchProject {
 
   owner User @relation("ResearchOwner", fields: [ownerId], references: [id], onDelete: Cascade)
 
+  references         Reference[]
+  referenceCitations ReferenceCitation[]
+  claims             ResearchClaim[]
+
   @@index([ownerId])
+}
+
+// ------------------------------------------------------------
+// BIBLIOGRAPHY & REFERENCE INTELLIGENCE (mission dédiée)
+//
+// Remplace/complète le blob JSON ResearchProject.bibliography (encore
+// lu/écrit tel quel par app/api/research-state/route.ts pour la
+// compatibilité descendante avec ResearchContext.tsx — mission §2,
+// aucune régression) par un modèle relationnel réel : nécessaire pour
+// la pagination/recherche serveur (mission §35, un blob JSON ne peut
+// pas être paginé côté base), la déduplication, le suivi de
+// vérification et la traçabilité citation↔référence↔claim, aucune de
+// ces capacités n'existant sur le blob (author/year/title/type
+// uniquement, jamais de DOI/ISBN/provenance/statut de vérification).
+//
+// PROVENANCE (mission §9) : vocabulaire DÉDIÉ, distinct de
+// ProvenanceTag (lib/core/research/ResearchTypes.ts) — ProvenanceTag
+// qualifie la provenance d'une VERSION D'ANALYSE entière (SUBJECT,
+// AI_INFERENCE...), pas l'origine d'IMPORT d'une référence
+// bibliographique précise (BIBTEX_IMPORT, DOI_LOOKUP...) : réutiliser
+// ProvenanceTag tel quel aurait forcé une correspondance sémantique
+// artificielle plutôt qu'un vocabulaire honnête.
+// ------------------------------------------------------------
+
+model Reference {
+  id        String @id @default(cuid())
+  projectId String
+
+  title   String
+  authors String // JSON string[] — jamais inventés, jamais reformatés au-delà d'une normalisation d'espaces (mission §16)
+  year    Int?
+
+  sourceType String // ReferenceSourceType : JOURNAL_ARTICLE | BOOK | ... (voir ReferenceTypes.ts)
+
+  journal   String?
+  publisher String?
+  volume    String?
+  issue     String?
+  pages     String?
+
+  doi      String?
+  isbn     String?
+  url      String?
+  language String?
+
+  // ReferenceVerificationStatus : VERIFIED | INFERRED | USER_PROVIDED |
+  // AI_PROPOSED | TO_VERIFY | INVALID (mission §5) — ne doit JAMAIS être
+  // VERIFIED simplement parce qu'une extraction IA a réussi (mission §23).
+  verificationStatus String @default("TO_VERIFY")
+  // ReferenceProvenance : USER_ENTERED | USER_IMPORTED | DOI_LOOKUP |
+  // BIBTEX_IMPORT | RIS_IMPORT | AI_PROPOSED | SYSTEM_IMPORTED (mission §9)
+  provenance String
+  // Confiance IA (0..1) — uniquement pertinente si provenance=AI_PROPOSED, jamais pour une saisie manuelle.
+  aiConfidence Decimal? @db.Decimal(4, 3)
+
+  // Entrée brute d'origine (texte BibTeX/RIS, ou JSON de la proposition
+  // IA validée) — traçabilité intégrale, jamais réinterprétée après coup.
+  rawImportData String?
+
+  // Doublon potentiel signalé (mission §15) — JAMAIS une suppression
+  // automatique, seulement un lien que le chercheur peut examiner.
+  duplicateOfId     String?
+  duplicateOf       Reference?  @relation("ReferenceDuplicate", fields: [duplicateOfId], references: [id], onDelete: SetNull)
+  duplicatesOfThis  Reference[] @relation("ReferenceDuplicate")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project   ResearchProject     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  citations ReferenceCitation[]
+  claims    ResearchClaim[]
+
+  @@index([projectId])
+  @@index([doi])
+  @@index([verificationStatus])
+}
+
+// Nommé ReferenceCitation (jamais "Citation" seul) pour éviter toute
+// ambiguïté future avec un usage non bibliographique du mot.
+model ReferenceCitation {
+  id          String  @id @default(cuid())
+  projectId   String
+  referenceId String? // null tant que non résolue (UNRESOLVED_CITATION, mission §17)
+
+  rawText     String // ex. "(Kotler, 2017)" — jamais modifié après capture
+  citedAuthor String? // extrait du texte brut, jamais inventé
+  citedYear   Int?
+
+  // CitationResolutionStatus : RESOLVED | UNRESOLVED | AMBIGUOUS (mission §17/§18)
+  resolutionStatus String @default("UNRESOLVED")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project   ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reference Reference?      @relation(fields: [referenceId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([referenceId])
+}
+
+// Préparatoire (mission §21/§48, traçabilité CLAIM → SOURCE →
+// REFERENCE) — CRUD minimal volontaire, jamais générée automatiquement :
+// le texte d'un claim est toujours saisi par le chercheur, jamais
+// proposé par l'IA dans cette mission.
+model ResearchClaim {
+  id          String  @id @default(cuid())
+  projectId   String
+  text        String
+  referenceId String? // null tant qu'aucune source réelle n'est reliée ("Source à ajouter ou vérifier", mission §21)
+
+  // Mission 9 — Research Writing Engine — additifs, nullables pour tout
+  // claim antérieur. Un claim reste TOUJOURS saisi par le chercheur
+  // (jamais généré par l'IA, voir ClaimService.ts) ; ces deux champs
+  // enregistrent seulement qu'une section de rédaction a RÉUTILISÉ ce
+  // claim déjà existant comme matière citable, jamais l'inverse.
+  claimType String? // "fact" | "figure" | "citation" | "interpretation"
+  sectionId String? // id d'un WritingSection (stocké en JSON dans ResearchProject.payload, pas une table dédiée — voir WritingTypes.ts)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project   ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reference Reference?      @relation(fields: [referenceId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([referenceId])
+  @@index([sectionId])
 }
 
 // ------------------------------------------------------------
@@ -738,9 +880,9 @@ model Payment {
   entitlementKey String
   amountUsd      Decimal  @db.Decimal(10, 2)
   currency       String   @default("USD")
-  status         String // pending | succeeded | failed
-  provider       String // beta_free | mobile_money | stripe (futurs fournisseurs réels)
-  providerRef    String? // référence externe, une fois un vrai fournisseur branché
+  status         String // pending | processing | succeeded | failed | cancelled | expired — voir lib/server/billing/payment/PaymentStatus.ts (source unique de vérité)
+  provider       String // beta_free | mock | orange_money | airtel_money | cinetpay
+  providerRef    String? // référence de transaction côté provider — sert à corréler un WebhookEvent à ce Payment
   idempotencyKey String   @unique
   failureReason  String?
   createdAt      DateTime @default(now())
@@ -749,4 +891,447 @@ model Payment {
   @@index([userId])
   @@index([projectId])
   @@index([status])
+}
+
+// ------------------------------------------------------------
+// PAYMENT ENGINE (mission dédiée) — trace CHAQUE événement webhook reçu
+// d'un fournisseur de paiement, réussi ou non. La contrainte unique
+// (provider, providerEventId) EST le mécanisme d'idempotence : un même
+// événement reçu 1, 2 ou 10 fois ne peut créer qu'UNE seule ligne ici,
+// et donc ne peut déclencher qu'UN seul octroi d'entitlement (voir
+// app/api/webhooks/payments/[provider]/route.ts).
+//
+// rawPayloadHash (jamais le payload brut complet, voir audit Mission 1
+// §10) : un payload provider peut contenir un numéro de téléphone ou
+// d'autres données personnelles — seul un hash est conservé, suffisant
+// pour détecter un rejeu à l'identique en debug sans stocker de donnée
+// personnelle en clair.
+// ------------------------------------------------------------
+model WebhookEvent {
+  id              String    @id @default(cuid())
+  provider        String
+  providerEventId String
+  paymentId       String?
+  status          String    @default("received") // received | processed | failed | ignored
+  rawPayloadHash  String?
+  receivedAt      DateTime  @default(now())
+  processedAt     DateTime?
+
+  @@unique([provider, providerEventId])
+  @@index([paymentId])
+}
+
+// ============================================================
+// ACADEMIC ASSESSMENT — CORE (mission dédiée, 14/09/2026)
+//
+// Audit préalable (voir rapport) : aucun modèle Assignment/Question/
+// Rubric/Evaluation/Grade/Teacher/Institution n'existait. `Submission`
+// existe déjà pour la supervision de mémoire (studentId/supervisorId/
+// snapshot d'un ResearchProject) — domaine différent, jamais réutilisé
+// ici : le nouveau modèle de soumission de copie s'appelle
+// AssessmentSubmission pour éviter toute confusion. StudentProfile
+// (déjà existant) EST réutilisé tel quel — un étudiant ACADIA n'a pas
+// besoin d'un second profil pour l'Assessment.
+//
+// Statuts en String (pas d'enum Prisma) — convention déjà établie dans
+// tout ce schéma (voir en-tête du fichier), validés côté application
+// par les unions TS de lib/core/assessment/AssessmentTypes.ts.
+// ============================================================
+
+// ------------------------------------------------------------
+// HIÉRARCHIE INSTITUTIONNELLE — minimale, seulement ce qu'il faut pour
+// permettre plus tard la sélection en cascade Institution → Faculté →
+// Programme → Promotion → Cours → Enseignant (mission §3). Aucune
+// interface d'administration n'est construite dans cette mission — les
+// lignes sont créées directement (script/DB) tant qu'un back-office
+// n'existe pas.
+// ------------------------------------------------------------
+
+model Institution {
+  id        String   @id @default(cuid())
+  name      String
+  city      String?
+  country   String?
+  createdAt DateTime @default(now())
+
+  faculties       Faculty[]
+  teacherProfiles TeacherProfile[]
+
+  @@index([name])
+}
+
+model Faculty {
+  id            String   @id @default(cuid())
+  institutionId String
+  name          String
+  createdAt     DateTime @default(now())
+
+  institution     Institution      @relation(fields: [institutionId], references: [id], onDelete: Restrict)
+  programs        Program[]
+  teacherProfiles TeacherProfile[]
+
+  @@index([institutionId])
+}
+
+// "Department / Program" (mission §2/§3) — un seul niveau, les deux
+// termes désignant le même palier dans la hiérarchie demandée.
+model Program {
+  id        String   @id @default(cuid())
+  facultyId String
+  name      String
+  createdAt DateTime @default(now())
+
+  faculty         Faculty          @relation(fields: [facultyId], references: [id], onDelete: Restrict)
+  cohorts         Cohort[]
+  teacherProfiles TeacherProfile[]
+
+  @@index([facultyId])
+}
+
+// "Cohort / Promotion" (mission §2/§3).
+model Cohort {
+  id           String   @id @default(cuid())
+  programId    String
+  name         String // ex. "L1 2025-2026"
+  academicYear String?
+  // Code de classe partagé par les enseignants aux étudiants pour
+  // rejoindre leur promotion (mission Student Enrollment, retour
+  // utilisateur post-Mission 7) — réutilisable par tous les étudiants
+  // de la cohorte, jamais à usage unique (mission Google Classroom-like,
+  // pas un système d'invitation nominative comme SupervisorInvitation).
+  joinCode     String?  @unique
+  createdAt    DateTime @default(now())
+
+  program     Program            @relation(fields: [programId], references: [id], onDelete: Restrict)
+  courses     Course[]
+  assignments Assignment[]
+  memberships CohortMembership[]
+
+  @@index([programId])
+}
+
+// ------------------------------------------------------------
+// COHORT MEMBERSHIP — le chaînon étudiant↔cohorte manquant depuis la
+// Mission Student Submission Engine (gap explicitement documenté à
+// l'époque, jamais comblé jusqu'ici). Une ligne = un étudiant
+// appartient réellement à une promotion précise — c'est CE lien qui
+// permet à "Mes TP" de savoir quels TP concernent quel étudiant, sans
+// jamais deviner ni tout exposer.
+// ------------------------------------------------------------
+
+model CohortMembership {
+  id        String   @id @default(cuid())
+  studentId String
+  cohortId  String
+  joinedAt  DateTime @default(now())
+
+  student User   @relation("CohortMembershipStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  cohort  Cohort @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, cohortId])
+  @@index([studentId])
+  @@index([cohortId])
+}
+
+model Course {
+  id        String   @id @default(cuid())
+  cohortId  String
+  // Enseignant "propriétaire" du cours — optionnel : un cours peut
+  // exister avant qu'un enseignant lui soit rattaché. Sélectionnable
+  // dans le futur sélecteur uniquement si TeacherProfile.receivingEnabled
+  // = true (mission §4/§20 — voir AssessmentDirectoryService).
+  teacherId String?
+  name      String
+  createdAt DateTime @default(now())
+
+  cohort      Cohort         @relation(fields: [cohortId], references: [id], onDelete: Restrict)
+  teacher     TeacherProfile? @relation(fields: [teacherId], references: [userId], onDelete: SetNull)
+  assignments Assignment[]
+
+  @@index([cohortId])
+  @@index([teacherId])
+}
+
+// ------------------------------------------------------------
+// TEACHER PROFILE — distinct de SupervisorProfile (supervision de
+// mémoire, autre domaine, voir audit). receivingEnabled est LA règle
+// fondamentale (mission §4) : un enseignant n'apparaît dans un
+// sélecteur de destination que s'il l'a explicitement activé — jamais
+// implicite, jamais activé par défaut.
+// ------------------------------------------------------------
+
+model TeacherProfile {
+  userId           String   @id
+  displayName      String?
+  institutionId    String?
+  facultyId        String?
+  programId        String?
+  status           String   @default("active") // active | disabled
+  receivingEnabled Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  institution Institution? @relation(fields: [institutionId], references: [id], onDelete: SetNull)
+  faculty     Faculty?     @relation(fields: [facultyId], references: [id], onDelete: SetNull)
+  program     Program?     @relation(fields: [programId], references: [id], onDelete: SetNull)
+  courses     Course[]
+
+  @@index([institutionId])
+  @@index([facultyId])
+  @@index([programId])
+  @@index([receivingEnabled])
+}
+
+// ------------------------------------------------------------
+// ASSIGNMENT — seul type réellement activé : TP (mission §6). Les
+// autres (TD/HOMEWORK/QUIZ/INTERROGATION/EXAM) existent dans le type
+// TS AssignmentType pour préparer l'architecture, jamais exposés côté
+// création tant que la validation applicative ne les autorise pas
+// (voir AssignmentService.ts).
+//
+// DELETE POLICY (mission §26) : jamais de suppression réelle une fois
+// des AssessmentSubmission existent — voir archiveAssignment() dans
+// AssignmentService.ts, qui refuse le hard-delete dans ce cas et
+// impose le statut "archived".
+// ------------------------------------------------------------
+
+model Assignment {
+  id            String    @id @default(cuid())
+  teacherId     String
+  courseId      String
+  cohortId      String // dénormalisé depuis Course.cohortId au moment de la création — simplifie le filtrage direct, voir limitations du rapport
+  title         String
+  description   String?
+  instructions  String?
+  type          String // AssignmentType : TP | TD | HOMEWORK | QUIZ | INTERROGATION | EXAM (TP seul activé)
+  status        String    @default("draft") // AssignmentStatus : draft | published | closed | archived
+  availableFrom DateTime?
+  dueAt         DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  teacher     User                   @relation("AssignmentTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
+  course      Course                 @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  cohort      Cohort                 @relation(fields: [cohortId], references: [id], onDelete: Restrict)
+  questions   Question[]
+  submissions AssessmentSubmission[]
+
+  @@index([teacherId])
+  @@index([courseId])
+  @@index([cohortId])
+  @@index([status])
+}
+
+// ------------------------------------------------------------
+// QUESTION — VERSIONING (mission §8, exigence critique). Une question
+// publiée n'est jamais modifiée en place : toute édition après
+// publication crée une NOUVELLE ligne (version+1, même groupKey),
+// l'ancienne recevant supersededAt. Une AssessmentAnswer référence
+// TOUJOURS la version exacte qui était active au moment de la
+// réponse — jamais recalculée, jamais réécrite. Le Rubric est lié 1:1
+// à CETTE version précise (voir Rubric ci-dessous), garantissant
+// qu'une vieille copie reste corrigeable avec la question ET le
+// barème tels qu'ils existaient (mission §8, dernier paragraphe).
+// ------------------------------------------------------------
+
+model Question {
+  id            String    @id @default(cuid())
+  assignmentId  String
+  groupKey      String // stable à travers les versions d'"une même" question logique
+  version       Int       @default(1)
+  supersededAt  DateTime? // null = version courante/active
+  order         Int       @default(0)
+  statement     String
+  type          String // QuestionType : OPEN_TEXT | SHORT_ANSWER | NUMERIC | MULTIPLE_CHOICE | TRUE_FALSE | CALCULATION
+  maxScore      Decimal   @db.Decimal(6, 2)
+  // Repère pédagogique, PAS une chaîne à comparer exactement (mission
+  // §10) — la future intelligence de correction évalue sémantiquement
+  // question + expectedAnswer + rubric + réponse étudiant ensemble.
+  expectedAnswer String?
+  instructions   String?
+  metadata       String? // JSON libre
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  assignment Assignment      @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  rubric     Rubric?
+  answers    AssessmentAnswer[]
+
+  // Mission Assignment Builder + TP Intelligence — empêche deux versions
+  // concurrentes de la même question logique (même groupKey) de partager
+  // le même numéro de version : la transaction perdante d'un versioning
+  // concurrent échoue proprement (contrainte unique) plutôt que de
+  // produire silencieusement deux lignes "version 2" toutes deux
+  // supersededAt=null (voir QuestionService.updateQuestion et le rapport,
+  // §16 "Duplication/Concurrence").
+  @@unique([assignmentId, groupKey, version])
+  @@index([assignmentId])
+  @@index([groupKey])
+}
+
+// ------------------------------------------------------------
+// RUBRIC — un barème par VERSION de question (1:1), jamais partagé
+// entre versions (mission §8/§9). La réponse modèle n'est qu'un repère
+// parmi les formulations correctes possibles (mission §9, dernier
+// paragraphe) — expectedElements sur chaque critère reste une liste de
+// repères, jamais une exigence de formulation exacte.
+// ------------------------------------------------------------
+
+model Rubric {
+  id         String   @id @default(cuid())
+  questionId String   @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  question Question           @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  criteria RubricCriterion[]
+}
+
+model RubricCriterion {
+  id               String   @id @default(cuid())
+  rubricId         String
+  name             String
+  description      String?
+  maxScore         Decimal  @db.Decimal(6, 2)
+  expectedElements String? // JSON string[] — repères, jamais une formulation exacte exigée
+  weight           Decimal? @db.Decimal(5, 2)
+  order            Int      @default(0)
+  createdAt        DateTime @default(now())
+
+  rubric          Rubric                     @relation(fields: [rubricId], references: [id], onDelete: Cascade)
+  criterionScores EvaluationCriterionScore[]
+
+  @@index([rubricId])
+}
+
+// ------------------------------------------------------------
+// ASSESSMENT SUBMISSION — nommée ainsi pour ne jamais être confondue
+// avec le modèle Submission existant (supervision de mémoire, voir
+// audit). Une resoumission ne fait jamais disparaître la précédente
+// (mission §11) : elle crée une NOUVELLE ligne (version+1) plutôt que
+// d'écraser — voir SubmissionService.ts pour la règle exacte
+// (resoumission autorisée seulement depuis "draft" ou "returned").
+// ------------------------------------------------------------
+
+model AssessmentSubmission {
+  id           String    @id @default(cuid())
+  assignmentId String
+  studentId    String
+  version      Int       @default(1)
+  status       String    @default("draft") // AssessmentSubmissionStatus : draft | submitted | under_review | graded | returned
+  submittedAt  DateTime?
+  finalizedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  assignment Assignment         @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  student    User               @relation("AssessmentSubmissionStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  answers    AssessmentAnswer[]
+
+  @@unique([assignmentId, studentId, version])
+  @@index([assignmentId])
+  @@index([studentId])
+  @@index([status])
+}
+
+// ------------------------------------------------------------
+// ANSWER — préparée pour un contenu futur texte/photo/scan/PDF/OCR
+// (mission §12) via attachmentRef (référence libre, jamais le binaire
+// ici) — Document/OCRResult ne sont PAS construits maintenant (mission
+// §24), seule cette référence existe pour ne pas bloquer leur ajout
+// ultérieur sans migration destructive.
+// ------------------------------------------------------------
+
+model AssessmentAnswer {
+  id             String   @id @default(cuid())
+  submissionId   String
+  questionId     String // pointe la version EXACTE de Question active au moment de la réponse
+  order          Int      @default(0)
+  answerText     String?
+  answerData     String? // JSON — QCM/numérique/structuré
+  attachmentRef  String? // référence future vers un document/scan — jamais le contenu binaire
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  submission AssessmentSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  question   Question             @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  evaluation Evaluation?
+
+  @@unique([submissionId, questionId])
+  @@index([submissionId])
+  @@index([questionId])
+}
+
+// ------------------------------------------------------------
+// EVALUATION — AI_SCORE et HUMAN_SCORE JAMAIS écrasés l'un par l'autre
+// (mission §13, règle absolue) : deux colonnes distinctes, toujours
+// conservées. finalScore est déterminé par la décision humaine
+// (accept/modify/reject) — jamais recalculé silencieusement ailleurs.
+// AI proposes, teacher validates (mission §18) : needsHumanReview part
+// à true par défaut, aucune Evaluation n'est "finalized" sans passage
+// explicite par une décision humaine dans EvaluationService.ts.
+// ------------------------------------------------------------
+
+model Evaluation {
+  id               String   @id @default(cuid())
+  answerId         String   @unique
+  aiScore          Decimal? @db.Decimal(6, 2)
+  humanScore       Decimal? @db.Decimal(6, 2)
+  finalScore       Decimal? @db.Decimal(6, 2)
+  confidence       Decimal? @db.Decimal(4, 3) // 0..1
+  needsHumanReview Boolean  @default(true)
+  status           String   @default("ai_proposed") // EvaluationStatus : ai_proposed | human_review | accepted | modified | rejected | finalized
+  // Modèle IA ayant produit aiScore — corrélation avec AIUsageLedger
+  // (operation="ASSESSMENT_GRADING") sans dupliquer son suivi de coût.
+  aiModel   String?
+  // Proposition complète validée (JSON de AIGradingResult — mission AI
+  // Grading Engine) : findings/evidence/limitations/warnings intégraux,
+  // au-delà du texte condensé déjà stocké dans EvaluationFeedback.
+  // Traçabilité uniquement — jamais réinterprété ni utilisé pour une
+  // décision automatique.
+  aiRawProposal String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  answer          AssessmentAnswer          @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  criterionScores EvaluationCriterionScore[]
+  feedbacks       EvaluationFeedback[]
+
+  @@index([status])
+}
+
+model EvaluationCriterionScore {
+  id           String   @id @default(cuid())
+  evaluationId String
+  criterionId  String
+  score        Decimal  @db.Decimal(6, 2)
+  maxScore     Decimal  @db.Decimal(6, 2)
+  confidence   Decimal? @db.Decimal(4, 3)
+  evidence     String?
+  comment      String?
+  createdAt    DateTime @default(now())
+
+  evaluation Evaluation      @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  criterion  RubricCriterion @relation(fields: [criterionId], references: [id], onDelete: Restrict)
+
+  @@index([evaluationId])
+  @@index([criterionId])
+}
+
+// Nommé EvaluationFeedback (pas "Feedback" seul) pour ne jamais être
+// confondu avec FeedbackEntry existant (évaluation académique
+// superviseur → étudiant, autre domaine — voir audit). source distingue
+// toujours l'origine réelle : un commentaire IA n'est jamais présenté
+// comme un commentaire enseignant (mission §15, règle absolue).
+model EvaluationFeedback {
+  id           String   @id @default(cuid())
+  evaluationId String
+  source       String // FeedbackSource : ai | teacher
+  text         String
+  createdAt    DateTime @default(now())
+
+  evaluation Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+
+  @@index([evaluationId])
 }

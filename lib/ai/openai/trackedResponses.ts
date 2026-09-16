@@ -32,14 +32,37 @@ export interface AITrackingContext {
   correlationId?: string | null;
 }
 
+/**
+ * Sous-ensemble minimal des options de requête du SDK OpenAI utile ici
+ * (timeout/annulation) — le type complet `RequestOptions` du SDK vit
+ * sous un sous-chemin non exporté publiquement par le package
+ * (`openai/internal/*`, absent de son `package.json#exports`), donc non
+ * importable proprement ; cette interface locale suffit et reste
+ * structurellement compatible avec ce que `openai.responses.create`
+ * accepte en second argument.
+ */
+export interface TrackedRequestOptions {
+  timeout?: number;
+  signal?: AbortSignal;
+}
+
+/**
+ * `requestOptions` (mission AI Grading Engine §34) — optionnel, transmis
+ * tel quel au SDK OpenAI (ex. `{ timeout: 60000 }`). Absent par défaut :
+ * AUCUN changement de comportement pour les appelants existants (A1/A2/
+ * etc.), qui n'en avaient jamais besoin jusqu'ici. Ajouté ici plutôt que
+ * dans un second wrapper — ce fichier reste le seul point de passage
+ * vers `openai.responses.create`.
+ */
 export async function createTrackedResponse(
   params: ResponseCreateParamsNonStreaming,
-  tracking: AITrackingContext
+  tracking: AITrackingContext,
+  requestOptions?: TrackedRequestOptions
 ): Promise<OpenAIResponseObject> {
   const start = Date.now();
 
   try {
-    const response = await openai.responses.create(params);
+    const response = await openai.responses.create(params, requestOptions);
     const latencyMs = Date.now() - start;
 
     const inputTokens = response.usage?.input_tokens ?? null;

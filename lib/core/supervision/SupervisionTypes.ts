@@ -302,7 +302,11 @@ export type NotificationType =
   | "correction_requested"
   | "correction_resolved"
   | "supervisor_invitation"
-  | "unread_message";
+  | "unread_message"
+  // Mission 9 — Correction automatique à la soumission : notifie
+  // l'enseignant qu'une copie vient d'être corrigée automatiquement
+  // (déterministe et/ou IA) et attend sa décision.
+  | "grading_ready";
 
 export interface Notification {
   id: string;

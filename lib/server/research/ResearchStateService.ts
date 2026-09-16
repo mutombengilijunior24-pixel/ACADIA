@@ -418,6 +418,35 @@ export async function updateScientificConclusionContent(
 }
 
 /**
+ * Crée OU remplace la section de rédaction (Mission 9) d'UN type donné
+ * pour ce projet — une seule section active par WritingSectionType
+ * (pas d'historique multi-sections au niveau racine, contrairement à
+ * scientificInterpretations/scientificConclusions : c'est
+ * `section.versions`, déjà entièrement reconstruit par l'appelant
+ * avant d'appeler cette fonction, qui porte l'historique complet —
+ * voir WritingSectionService.ts, seul appelant légitime). Retourne
+ * null si le projet n'existe pas ou n'appartient pas à ownerId.
+ */
+export async function upsertWritingSectionRecord(
+  ownerId: string,
+  id: string,
+  section: NonNullable<ScientificProject["writingSections"]>[number]
+): Promise<NonNullable<ScientificProject["writingSections"]>[number] | null> {
+  const existing = await prisma.researchProject.findUnique({ where: { id } });
+  if (!existing || existing.ownerId !== ownerId) return null;
+
+  const project = safeParse<ScientificProject>(existing.payload, {} as ScientificProject);
+  const sections = project.writingSections ?? [];
+  const index = sections.findIndex((s) => s.type === section.type);
+  if (index === -1) sections.push(section);
+  else sections[index] = section;
+  project.writingSections = sections;
+
+  await prisma.researchProject.update({ where: { id }, data: { payload: JSON.stringify(project) } });
+  return section;
+}
+
+/**
  * Ajoute une version d'analyse (mission Server Contracts & Research
  * Persistence) à l'historique du projet — même discipline
  * qu'appendStatisticalRunRecord/appendScientificInterpretationRecord/

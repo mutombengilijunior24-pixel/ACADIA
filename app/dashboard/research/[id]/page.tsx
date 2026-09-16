@@ -19,6 +19,7 @@ import AnalysisOverview from "@/components/research/analysis/AnalysisOverview";
 import BivariateAnalysisOverview from "@/components/research/analysis/BivariateAnalysisOverview";
 import EconometricAnalysisOverview from "@/components/research/analysis/EconometricAnalysisOverview";
 import ScientificWorkOverview from "@/components/research/scientific-work/ScientificWorkOverview";
+import WritingOverview from "@/components/research/writing/WritingOverview";
 import ExportOverview from "@/components/research/export/ExportOverview";
 import { computeResearchProgress } from "@/lib/core/dashboard/ResearchProgressEngine";
 import SubmitVersionButton from "@/components/supervision/SubmitVersionButton";
@@ -141,6 +142,10 @@ export default function ResearchProjectPage() {
     // "upcoming" en dur) — "fait" une fois qu'un export a été produit,
     // puisque le document exporté contient le chapitre d'interprétation.
     { key: "interpret", label: "Interpréter mes résultats", status: stageStatus(exportedForStages, observationCountForStages > 0), sectionId: "interpretation-section" },
+    // Mission 9 (Research Writing Engine) — même ancre de disponibilité
+    // que "interpret" (aucun état dédié suivi ici : WritingOverview
+    // affiche lui-même son propre état réel une fois ouvert).
+    { key: "write", label: "Rédiger mon travail", status: stageStatus(exportedForStages, observationCountForStages > 0), sectionId: "writing-section" },
     { key: "finalize", label: "Finaliser mon travail", status: stageStatus(exportedForStages, observationCountForStages > 0), sectionId: "export-section" },
   ];
 
@@ -154,6 +159,7 @@ export default function ResearchProjectPage() {
     collect: "collect",
     analyze: "analyze",
     interpret: "interpret",
+    write: "write",
     finalize: "finalize",
   };
   const SECTION_TO_GROUP: Record<string, string> = {
@@ -162,6 +168,7 @@ export default function ResearchProjectPage() {
     "dataset-import-section": "collect",
     "analysis-section": "analyze",
     "interpretation-section": "interpret",
+    "writing-section": "write",
     "export-section": "finalize",
   };
   const currentStage = stages.find((s) => s.status === "current");
@@ -580,6 +587,22 @@ export default function ResearchProjectPage() {
                 dataset={datasets[scientificProject.id]}
                 instrument={instruments[scientificProject.id]}
               />
+            </div>
+          </CollapsibleSection>
+
+          {/* ============================================= */}
+          {/* RÉDIGER MON TRAVAIL (Mission 9)                */}
+          {/* ============================================= */}
+
+          <CollapsibleSection
+            title="Rédiger mon travail"
+            summary="Introduction, problématique, méthodologie, discussion et conclusion en prose académique"
+            status={groupStatusFor("write")}
+            open={isGroupOpen("write")}
+            onToggle={() => toggleGroup("write")}
+          >
+            <div id="writing-section">
+              <WritingOverview project={scientificProject} />
             </div>
           </CollapsibleSection>
 

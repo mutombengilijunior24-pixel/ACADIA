@@ -19,6 +19,7 @@ import type { AnalysisPlan } from "@/lib/core/analysis/AnalysisPlanTypes";
 import type { StatisticalAnalysisRun } from "@/lib/core/statistics/StatisticalTypes";
 import type { ScientificInterpretation } from "@/lib/core/analysis/ScientificInterpretationTypes";
 import type { ScientificConclusion } from "@/lib/core/analysis/ScientificConclusionTypes";
+import type { WritingSection } from "@/lib/core/writing/WritingTypes";
 
 
 // ============================================================
@@ -1125,6 +1126,15 @@ export interface ResearchProject {
   // ----------------------------------------------------------
 
   scientificConclusions?: ScientificConclusion[];
+
+  // ----------------------------------------------------------
+  // RÉDACTION SCIENTIFIQUE (Mission 9) — additif, une section par
+  // WritingSectionType (pas d'historique multi-sections comme les
+  // blocs ci-dessus : chaque section garde son propre historique de
+  // versions en interne, voir WritingSection.versions).
+  // ----------------------------------------------------------
+
+  writingSections?: WritingSection[];
 
   // ----------------------------------------------------------
   // MÉTADONNÉES

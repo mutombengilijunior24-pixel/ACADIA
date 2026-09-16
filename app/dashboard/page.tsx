@@ -14,6 +14,7 @@ import AcademicCalendar from "../../components/dashboard/AcademicCalendar";
 import OnboardingModal from "../../components/dashboard/OnboardingModal";
 import UnderstandAcadia from "../../components/dashboard/UnderstandAcadia";
 import MyEncadrement from "../../components/dashboard/MyEncadrement";
+import RoleFocusWidget from "../../components/dashboard/RoleFocusWidget";
 import { useResearch } from "@/contexts/ResearchContext";
 
 import {
@@ -40,6 +41,10 @@ export default function DashboardPage() {
       {/* Titre */}
 
       <DashboardHeader />
+
+      {/* Ce qui attend l'utilisateur, adapté à son rôle réel (retour utilisateur) */}
+
+      <RoleFocusWidget />
 
       {/* Éducation permanente — Comprendre ACADIA (P14) */}
 

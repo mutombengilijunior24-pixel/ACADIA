@@ -529,6 +529,12 @@ function BibliographyTab({
 
   return (
     <div className="space-y-5">
+      <a
+        href={`/dashboard/research/${researchId}/bibliography`}
+        className="block rounded-2xl border border-acadia-blue-100 bg-acadia-blue-50 px-4 py-3 text-sm font-semibold text-acadia-blue hover:bg-acadia-blue-100"
+      >
+        Ouvrir la bibliothèque avancée (DOI, import BibTeX/RIS, statut de vérification, citations) →
+      </a>
       <div>
         <p className="text-xs font-bold tracking-wider text-acadia-blue uppercase">Références enregistrées</p>
         {sorted.length === 0 ? (

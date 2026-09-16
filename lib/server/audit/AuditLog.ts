@@ -117,7 +117,126 @@ export type AuditAction =
   | "ENTITLEMENT_GRANTED"
   | "STAGE_STARTED"
   | "STAGE_COMPLETED"
-  | "STAGE_ABANDONED";
+  | "STAGE_ABANDONED"
+
+  // ------------------------------------------------------------
+  // PAYMENT ENGINE (mission dédiée) — étend le vocabulaire ci-dessus,
+  // ne le duplique pas. WEBHOOK_REJECTED est un événement de SÉCURITÉ
+  // (signature invalide/provider inconnu), pas un événement produit —
+  // c'est pourquoi il vit ici et pas dans PUBLIC_PRODUCT_EVENT_TYPES.
+  // ------------------------------------------------------------
+
+  | "PAYMENT_PROCESSING"
+  | "PAYMENT_CANCELLED"
+  | "PAYMENT_EXPIRED"
+  | "ENTITLEMENT_REVOKED"
+  | "WEBHOOK_REJECTED"
+
+  // ------------------------------------------------------------
+  // ACADEMIC ASSESSMENT CORE (mission dédiée) — voir
+  // lib/server/assessment/*Service.ts, seuls émetteurs de ces actions.
+  // ------------------------------------------------------------
+
+  | "ASSIGNMENT_CREATED"
+  | "ASSIGNMENT_UPDATED"
+  | "ASSIGNMENT_PUBLISHED"
+  | "ASSIGNMENT_CLOSED"
+  | "QUESTION_CREATED"
+  | "QUESTION_UPDATED"
+  | "RUBRIC_CREATED"
+  | "ASSIGNMENT_SUBMITTED"
+  | "ASSIGNMENT_GRADED"
+  | "SUBMISSION_CREATED"
+  | "SUBMISSION_SUBMITTED"
+  | "SUBMISSION_RETURNED"
+  | "EVALUATION_CREATED"
+  | "EVALUATION_ACCEPTED"
+  | "EVALUATION_MODIFIED"
+  | "EVALUATION_REJECTED"
+  | "GRADE_FINALIZED"
+  | "AI_GRADING_PROPOSED"
+  | "AI_GRADING_ACCEPTED"
+  | "AI_GRADING_MODIFIED"
+  | "AI_GRADING_REJECTED"
+
+  // ------------------------------------------------------------
+  // AI GRADING ENGINE (mission dédiée) — étend le vocabulaire
+  // Academic Assessment Core ci-dessus, ne le duplique pas.
+  // AI_GRADING_REQUESTED marque le déclenchement d'une correction par
+  // l'enseignant (avant toute réponse de l'IA) ; AI_GRADING_FAILED
+  // marque un échec du moteur/de la validation de sortie — distinct
+  // d'AI_GRADING_REJECTED, qui est une DÉCISION humaine, jamais un
+  // échec technique.
+  // ------------------------------------------------------------
+
+  | "AI_GRADING_REQUESTED"
+  | "AI_GRADING_FAILED"
+
+  // ------------------------------------------------------------
+  // TEACHER WORKSPACE + GRADEBOOK (mission dédiée) — étend le
+  // vocabulaire Academic Assessment / AI Grading ci-dessus, ne le
+  // duplique pas : accepter/modifier une proposition restent
+  // AI_GRADING_ACCEPTED/AI_GRADING_MODIFIED (Mission 3), retourner une
+  // copie reste SUBMISSION_RETURNED (Mission 5) — seuls les événements
+  // de consultation/lecture, absents jusqu'ici, sont ajoutés.
+  // ------------------------------------------------------------
+
+  | "TEACHER_DASHBOARD_VIEWED"
+  | "ASSIGNMENT_OPENED"
+  | "SUBMISSION_OPENED"
+  | "AI_PROPOSAL_VIEWED"
+  | "GRADEBOOK_VIEWED"
+  | "GRADE_EXPORT_REQUESTED"
+
+  // ------------------------------------------------------------
+  // BIBLIOGRAPHY & REFERENCE INTELLIGENCE (mission dédiée) — voir
+  // lib/server/research/Reference*.ts, seuls émetteurs.
+  // ------------------------------------------------------------
+
+  | "REFERENCE_CREATED"
+  | "REFERENCE_UPDATED"
+  | "REFERENCE_IMPORTED"
+  | "REFERENCE_DELETED"
+  | "REFERENCE_VERIFICATION_CHANGED"
+  | "BIBLIOGRAPHY_VIEWED"
+  | "BIBLIOGRAPHY_EXPORTED"
+  | "CITATION_CHECKED"
+  | "DUPLICATE_DETECTED"
+  // Non listés explicitement par la mission mais nécessaires : une
+  // citation ou un claim créé ne doit jamais apparaître dans le
+  // journal sous l'action "REFERENCE_CREATED" (entityType différent,
+  // confusion à la lecture) — mêmes principes, actions dédiées.
+  | "CITATION_CREATED"
+  | "CLAIM_CREATED"
+
+  // ------------------------------------------------------------
+  // STUDENT ENROLLMENT (retour utilisateur post-Mission Teacher
+  // Workspace) — voir lib/server/assessment/EnrollmentService.ts.
+  // ------------------------------------------------------------
+
+  | "COHORT_JOINED"
+
+  // ------------------------------------------------------------
+  // MISSION 9 — CORRECTION AUTOMATIQUE À LA SOUMISSION — distingue un
+  // déclenchement automatique (ce nouvel événement) d'un déclenchement
+  // manuel par l'enseignant (AI_GRADING_REQUESTED, Mission 6, inchangé).
+  // ------------------------------------------------------------
+
+  | "AI_GRADING_AUTO_TRIGGERED"
+
+  // ------------------------------------------------------------
+  // MISSION 9 — RESEARCH WRITING ENGINE — voir
+  // lib/server/research/WritingSectionService.ts. Distingue une
+  // proposition IA d'une décision humaine (édition/validation/rejet),
+  // même discipline que Mission 6/7 (interprétation/conclusion).
+  // ------------------------------------------------------------
+
+  | "WRITING_SECTION_GENERATED"
+  | "WRITING_SECTION_EDITED"
+  | "WRITING_SECTION_VALIDATED"
+  | "WRITING_SECTION_REJECTED"
+  | "WRITING_SECTION_REGENERATED"
+  | "WRITING_COHERENCE_CHECKED";
 
 export async function logAudit(input: {
   actorId?: string;

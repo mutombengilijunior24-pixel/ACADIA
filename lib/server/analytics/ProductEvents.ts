@@ -58,6 +58,69 @@ export const PRODUCT_EVENT_TYPES = [
   "STAGE_STARTED",
   "STAGE_COMPLETED",
   "STAGE_ABANDONED",
+
+  // Payment Engine (mission dédiée) — voir lib/server/billing/payment/,
+  // seul émetteur de ces événements (via la route webhook).
+  "PAYMENT_PROCESSING",
+  "PAYMENT_CANCELLED",
+  "PAYMENT_EXPIRED",
+  "ENTITLEMENT_REVOKED",
+
+  // Academic Assessment Core (mission dédiée) — voir
+  // lib/server/assessment/*Service.ts.
+  "ASSIGNMENT_CREATED",
+  "ASSIGNMENT_UPDATED",
+  "ASSIGNMENT_PUBLISHED",
+  "ASSIGNMENT_SUBMITTED",
+  "ASSIGNMENT_GRADED",
+  "QUESTION_CREATED",
+  "QUESTION_UPDATED",
+  "RUBRIC_CREATED",
+  "AI_GRADING_PROPOSED",
+  "AI_GRADING_ACCEPTED",
+  "AI_GRADING_MODIFIED",
+  "AI_GRADING_REJECTED",
+
+  // AI Grading Engine (mission dédiée) — voir
+  // lib/server/assessment/AIGradingService.ts, seul émetteur.
+  "AI_GRADING_REQUESTED",
+  "AI_GRADING_FAILED",
+
+  // Teacher Workspace + Gradebook (mission dédiée) — voir
+  // lib/server/assessment/TeacherWorkspaceService.ts et les routes
+  // app/api/assessment/teacher/*, app/api/assessment/.../gradebook/*.
+  "TEACHER_DASHBOARD_VIEWED",
+  "ASSIGNMENT_OPENED",
+  "SUBMISSION_OPENED",
+  "AI_PROPOSAL_VIEWED",
+  "GRADEBOOK_VIEWED",
+  "GRADE_EXPORT_REQUESTED",
+
+  // Bibliography & Reference Intelligence (mission dédiée) — voir
+  // lib/server/research/Reference*.ts. REFERENCE_CREATED réutilisé tel
+  // quel (pas de "REFERENCE_ADDED" séparé — même événement réel).
+  "REFERENCE_CREATED",
+  "REFERENCE_IMPORTED",
+  "BIBLIOGRAPHY_VIEWED",
+  "BIBLIOGRAPHY_EXPORTED",
+  "CITATION_CHECKED",
+  "DUPLICATE_DETECTED",
+
+  // Student Enrollment (retour utilisateur post-Mission Teacher
+  // Workspace) — voir lib/server/assessment/EnrollmentService.ts.
+  "COHORT_JOINED",
+
+  // Mission 9 — Correction automatique à la soumission.
+  "AI_GRADING_AUTO_TRIGGERED",
+
+  // Mission 9 — Research Writing Engine — voir
+  // lib/server/research/WritingSectionService.ts.
+  "WRITING_SECTION_GENERATED",
+  "WRITING_SECTION_EDITED",
+  "WRITING_SECTION_VALIDATED",
+  "WRITING_SECTION_REJECTED",
+  "WRITING_SECTION_REGENERATED",
+  "WRITING_COHERENCE_CHECKED",
 ] as const;
 
 export type ProductEventType = (typeof PRODUCT_EVENT_TYPES)[number];
