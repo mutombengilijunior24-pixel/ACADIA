@@ -43,7 +43,7 @@ function LoginForm() {
       footer={
         <>
           Pas encore de compte ?{" "}
-          <Link href="/register" className="font-semibold text-acadia-blue hover:underline">
+          <Link href={searchParams.get("next")?.startsWith("/dashboard") ? `/register?next=${encodeURIComponent(searchParams.get("next")!)}` : "/register"} className="font-semibold text-acadia-blue hover:underline">
             Créer un compte
           </Link>
         </>

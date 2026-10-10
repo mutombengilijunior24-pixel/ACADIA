@@ -286,7 +286,7 @@ function RegisterForm() {
         footer={
           <>
             Déjà un compte ?{" "}
-            <Link href="/login" className="font-semibold text-acadia-blue hover:underline">
+            <Link href={safeNext ? `/login?next=${encodeURIComponent(safeNext)}` : "/login"} className="font-semibold text-acadia-blue hover:underline">
               Se connecter
             </Link>
           </>
@@ -334,7 +334,7 @@ function RegisterForm() {
       footer={
         <>
           Déjà un compte ?{" "}
-          <Link href="/login" className="font-semibold text-acadia-blue hover:underline">
+          <Link href={safeNext ? `/login?next=${encodeURIComponent(safeNext)}` : "/login"} className="font-semibold text-acadia-blue hover:underline">
             Se connecter
           </Link>
         </>

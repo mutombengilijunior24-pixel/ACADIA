@@ -16,6 +16,7 @@ import {
   BarChart3,
   ClipboardCheck,
   BookOpenCheck,
+  FileSpreadsheet,
 } from "lucide-react";
 import Logo from "@/components/shared/Logo";
 import { useAuth } from "@/contexts/AuthContext";
@@ -30,6 +31,7 @@ import { useAuth } from "@/contexts/AuthContext";
 const menuItems = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { title: "Mes recherches", href: "/dashboard/research", icon: FileSearch },
+  { title: "Interpréter mes données", href: "/dashboard/journey", icon: FileSpreadsheet },
   { title: "Survey", href: "/dashboard/survey", icon: ClipboardList },
   { title: "Paramètres", href: "/dashboard/settings", icon: Settings },
 ];

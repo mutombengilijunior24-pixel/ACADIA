@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowRight, CheckCircle2 } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, CheckCircle2, FileSpreadsheet } from "lucide-react";
 import HeroFlowPreview from "./HeroFlowPreview";
 import SubjectPreviewOverlay from "./SubjectPreviewOverlay";
 import { trackClientEvent } from "@/lib/client/trackEvent";
@@ -77,6 +78,20 @@ export default function Hero() {
                 </button>
               </div>
             </form>
+
+            {/* Accès direct au parcours d'interprétation : création de compte, puis retour sur le parcours guidé. */}
+            <div className="mt-6 flex max-w-xl flex-col gap-3 rounded-2xl border border-slate-200 bg-white/80 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-slate-600">
+                <span className="font-semibold text-acadia-navy">Vous avez déjà vos données ?</span> Questionnaire, enquête ou fichier Excel.
+              </p>
+              <Link
+                href="/register?next=/dashboard/journey"
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-acadia-blue bg-white px-5 py-3 text-sm font-semibold text-acadia-blue transition hover:bg-acadia-blue-50"
+              >
+                <FileSpreadsheet size={18} aria-hidden />
+                Interpréter directement mes données
+              </Link>
+            </div>
 
             <div className="mt-8">
               <a
