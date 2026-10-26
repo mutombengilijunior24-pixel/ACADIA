@@ -17,11 +17,12 @@ import type { FileStructure } from "./structure";
 export type PlanLevel = "descriptive" | "relation";
 
 /** Place d'une analyse dans le plan : descriptifs nécessaires, analyse principale, analyses facultatives. */
-export type PlanTier = "descriptive" | "main" | "secondary";
+export type PlanTier = "descriptive" | "main" | "indicator" | "secondary";
 
 export const TIER_LABELS: Record<PlanTier, string> = {
   descriptive: "Descriptif nécessaire",
   main: "Analyse principale",
+  indicator: "Croisement d'indicateurs (hypothèse)",
   secondary: "Complémentaire (facultative)",
 };
 
@@ -80,6 +81,10 @@ export interface PlanItem {
   blocker?: string;
   /** Les tests de groupes et le Chi² supposent des observations indépendantes. */
   needsIndependence: boolean;
+  /** Statut proposé par défaut (sinon : retenu si réalisable, sauf relation complémentaire). */
+  defaultStatus?: "accepted" | "rejected";
+  /** Chaîne de cohérence : ligne (question → objectif → hypothèse), hypothèse et groupe descriptif. */
+  chain?: { rowId?: string; hypothesisId?: string; group?: "independent" | "dependent" | "profile" | "other"; variableKey?: string; unitId?: string; ivUnitId?: string; dvUnitId?: string };
 }
 
 export interface AnalysisPlan {
@@ -114,7 +119,7 @@ export const UNAVAILABLE_METHODS = [
 
 const CATEGORICAL = new Set(["nominal", "ordinal"]);
 
-function describeExpected(type: string): string {
+export function describeExpected(type: string): string {
   if (CATEGORICAL.has(type)) return "Effectifs et pourcentages par modalité (mode, et médiane si l'ordre des modalités est connu).";
   if (type.startsWith("quantitative")) return "Effectif, moyenne, médiane, écart-type, minimum, maximum, quartiles et distribution.";
   return "Description adaptée au type confirmé.";
@@ -318,7 +323,7 @@ export function buildPlan(input: {
   return { items, final, missingForConclusion, unavailable: UNAVAILABLE_METHODS };
 }
 
-function conditionsFor(method: MethodId, dataset: ImportedDataset, preparation: PreparationState, outcome: VariableMetadata, explanatory: VariableMetadata): string[] {
+export function conditionsFor(method: MethodId, dataset: ImportedDataset, preparation: PreparationState, outcome: VariableMetadata, explanatory: VariableMetadata): string[] {
   if (method === "chi_square") {
     const pair = pairObservations(dataset, preparation, { variable: outcome, encoding: "category" }, { variable: explanatory, encoding: "category" });
     const rows = [...new Set(pair.valuesB.map(String))];
@@ -337,7 +342,7 @@ function conditionsFor(method: MethodId, dataset: ImportedDataset, preparation: 
   return ["Au moins 3 paires complètes ; idéalement 10 ou plus.", method === "pearson" ? "Relation à peu près linéaire, sans valeur extrême dominante." : "Relation monotone (Spearman, sur les rangs)."];
 }
 
-function expectedFor(method: MethodId): string {
+export function expectedFor(method: MethodId): string {
   switch (method) {
     case "chi_square":
       return "Tableau croisé (effectifs, pourcentages, effectifs attendus), χ², degrés de liberté, p-value, V de Cramér.";
@@ -360,11 +365,11 @@ export function orderedItems(plan: AnalysisPlan, decisions: PlanDecisions): Plan
 }
 
 export function itemStatus(item: PlanItem, decisions: PlanDecisions): "accepted" | "rejected" {
-  return decisions.status[item.id] ?? (item.feasible && !(item.level === "relation" && item.tier === "secondary") ? "accepted" : "rejected");
+  return decisions.status[item.id] ?? (item.feasible ? (item.defaultStatus ?? (item.level === "relation" && item.tier === "secondary" ? "rejected" : "accepted")) : "rejected");
 }
 
 /** Tableau croisé des effectifs (lignes : explicative ; colonnes : à expliquer), pour l'aperçu avant calcul. */
-function crossPreview(dataset: ImportedDataset, preparation: PreparationState, outcome: VariableMetadata, explanatory: VariableMetadata, rowVariable: string, colVariable: string): CrossPreview {
+export function crossPreview(dataset: ImportedDataset, preparation: PreparationState, outcome: VariableMetadata, explanatory: VariableMetadata, rowVariable: string, colVariable: string): CrossPreview {
   const pair = pairObservations(dataset, preparation, { variable: outcome, encoding: "category" }, { variable: explanatory, encoding: "category" });
   const rowLabels = [...new Set(pair.valuesB.map(String))].sort((a, b) => a.localeCompare(b, "fr", { numeric: true }));
   const colLabels = [...new Set(pair.valuesA.map(String))].sort((a, b) => a.localeCompare(b, "fr", { numeric: true }));

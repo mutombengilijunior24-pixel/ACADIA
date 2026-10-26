@@ -333,12 +333,12 @@ describe("Questionnaire fourni et diagnostic", () => {
 
 describe("Étapes du parcours", () => {
   it("indique l'étape courante, la prochaine action et les étapes à revoir", () => {
-    const start = journeySteps({ domain: false, research: false, instrument: false, data: false, quality: false, mapping: "none", plan: "none", results: "none" });
+    const start = journeySteps({ domain: false, research: false, framing: "none", instrument: false, data: false, quality: false, mapping: "none", plan: "none", results: "none" });
     expect(start.current).toBe("domain");
-    const planning = journeySteps({ domain: true, research: true, instrument: true, data: true, quality: true, mapping: "confirmed", plan: "none", results: "none" });
+    const planning = journeySteps({ domain: true, research: true, framing: "confirmed", instrument: true, data: true, quality: true, mapping: "confirmed", plan: "none", results: "none" });
     expect(planning.current).toBe("plan");
     expect(planning.nextAction).toContain("validez-le");
-    const stale = journeySteps({ domain: true, research: true, instrument: true, data: true, quality: true, mapping: "confirmed", plan: "validated", results: "stale" });
+    const stale = journeySteps({ domain: true, research: true, framing: "confirmed", instrument: true, data: true, quality: true, mapping: "confirmed", plan: "validated", results: "stale" });
     expect(stale.current).toBe("results");
     expect(stale.steps.find((s) => s.id === "results")?.state).toBe("stale");
     expect(stale.nextAction).toContain("des éléments ont changé");

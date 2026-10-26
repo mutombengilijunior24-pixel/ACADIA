@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { gunzipSync } from "fflate";
 import { ArrowLeft, Check, CircleDot, Loader2, RotateCcw } from "lucide-react";
 
 import { FileDropZone, FileSummary, PreviewStep } from "@/components/data/ImportStep";
@@ -8,7 +9,9 @@ import { buttonClass, Notice, Section } from "@/components/data/ui";
 import { importFlowReducer, initialImportFlow } from "@/lib/core/data/flow";
 import { importFile } from "@/lib/core/data/importer";
 import { profileDataset } from "@/lib/core/data/profile";
-import type { ImportOptions, StatisticalType } from "@/lib/core/data/types";
+import type { ImportOptions, PreparationOperation, StatisticalType } from "@/lib/core/data/types";
+import { replayOperations, sha256Hex, SNAPSHOT_VERSION, type JourneySnapshot, type SessionSummary } from "@/lib/core/journey/persistence";
+import { CHAIN_VERDICT_LABELS } from "@/lib/core/chain";
 import { buildUnderstanding } from "@/lib/core/data/understanding";
 import {
   checkConsistency,
@@ -55,15 +58,18 @@ import {
   type StepId,
 } from "@/lib/core/journey";
 import type { GeneratedQuestionnaire } from "@/lib/core/questionnaire/QuestionnaireTypes";
-import { buildUnderstandingReport, emptyDecisions, type ResearchUnderstandingInput } from "@/lib/core/understanding";
+import { buildUnderstandingReport, emptyDecisions, validateResearchInput, type ResearchUnderstandingInput } from "@/lib/core/understanding";
 import { excludedRows } from "@/lib/core/data/preparation";
 import { applyRouting, buildTrace, classify, datasetView, orchestrate, type ClassificationOverrides, type DomainId, type SpecialtyId } from "@/lib/core/orchestrator";
 import { hashKey } from "@/lib/core/understanding/text";
+import { assessChain, buildChain, buildChainPlan, emptyChainDecisions, interpretChain, type ChainDecisions } from "@/lib/core/chain";
 
 import { InstrumentStep, QualityStep, ResearchStep } from "./EarlySteps";
 import { PlanStep, VariablesStep } from "./AnalysisSteps";
 import { ClassificationPanel, DomainStep, OrchestrationPanel } from "./OrchestrationViews";
+import { CoherenceMatrix, FramingStep } from "./ChainViews";
 import { ResultsStep } from "./ResultsView";
+import { SAVE_LABELS, useJourneyPersistence } from "./useJourneyPersistence";
 
 export interface InstrumentState {
   kind: InstrumentKind | null;
@@ -72,38 +78,66 @@ export interface InstrumentState {
   acadia: { key: string; questionnaire: GeneratedQuestionnaire } | null;
 }
 
-export default function JourneyWorkspace() {
+/** Interprétation enregistrée, chargée avant le montage du parcours (reprise). */
+export interface SavedSession {
+  revision: number;
+  title: string;
+  snapshot: JourneySnapshot;
+  file: { name: string | null; size: number | null; sha256: string | null } | null;
+}
+
+/** Recherche enregistrée, revalidée avant d'être réutilisée. */
+function savedResearch(raw: unknown): ResearchUnderstandingInput | null {
+  if (!raw) return null;
+  const v = validateResearchInput(raw);
+  return v.ok ? v.input : null;
+}
+
+export default function JourneyWorkspace({ sessionId = null, initial = null }: { sessionId?: string | null; initial?: SavedSession | null } = {}) {
+  const snap = initial?.snapshot ?? null;
   // 0. Domaine et spécialité : perspective scientifique, modifiable sans perdre les données.
-  const [field, setField] = useState<{ domain: DomainId | null; specialty: SpecialtyId | null; secondary: SpecialtyId[] }>({ domain: null, specialty: null, secondary: [] });
-  const [fieldConfirmed, setFieldConfirmed] = useState(false);
+  const [field, setField] = useState<{ domain: DomainId | null; specialty: SpecialtyId | null; secondary: SpecialtyId[] }>(() => (snap ? (snap.field as { domain: DomainId | null; specialty: SpecialtyId | null; secondary: SpecialtyId[] }) : { domain: null, specialty: null, secondary: [] }));
+  const [fieldConfirmed, setFieldConfirmed] = useState(() => snap?.fieldConfirmed ?? false);
   // Corrections de la classification par l'utilisateur (type de données, unité, structure).
-  const [overrides, setOverrides] = useState<ClassificationOverrides>({});
+  const [overrides, setOverrides] = useState<ClassificationOverrides>(() => (snap?.overrides as ClassificationOverrides) ?? {});
   // 1. Recherche (moteur de compréhension)
-  const [research, setResearch] = useState<ResearchUnderstandingInput | null>(null);
+  const [research, setResearch] = useState<ResearchUnderstandingInput | null>(() => savedResearch(snap?.research));
   // 2. Instrument
-  const [instrument, setInstrument] = useState<InstrumentState>({ kind: null, mode: "headers", text: "", acadia: null });
-  const [instrumentConfirmed, setInstrumentConfirmed] = useState(false);
+  const [instrument, setInstrument] = useState<InstrumentState>(() => (snap ? ({ ...snap.instrument, kind: snap.instrument.kind as InstrumentKind | null, acadia: snap.instrument.acadia as InstrumentState["acadia"] }) : { kind: null, mode: "headers", text: "", acadia: null }));
+  const [instrumentConfirmed, setInstrumentConfirmed] = useState(() => snap?.instrumentConfirmed ?? false);
   // 3. Données (même flux que l'onglet Données)
   const [data, dispatch] = useReducer(importFlowReducer, initialImportFlow);
   const fileRef = useRef<File | null>(null);
   const readToken = useRef(0);
+  // Octets du fichier importé et options de lecture : pour la copie privée et la reprise à l'identique.
+  const fileBytesRef = useRef<Uint8Array | null>(null);
+  const [importOptions, setImportOptions] = useState<ImportOptions>(() => (snap?.data?.importOptions as ImportOptions) ?? {});
+  const [fileSha, setFileSha] = useState<string | null>(snap?.data?.sha256 ?? null);
+  const [keepFile, setKeepFile] = useState(true);
+  const [fileNotice, setFileNotice] = useState<string | null>(null);
+  const uploadedFor = useRef<string | null>(null);
+  // Reprise : fichier conservé (relu automatiquement) ou à réimporter.
+  const [restore, setRestore] = useState<{ status: "idle" | "loading" | "needs_file" | "mismatch" | "done"; message?: string }>(() => (snap?.data ? { status: initial?.file ? "loading" : "needs_file" } : { status: "idle" }));
   // 4–8. Décisions
-  const [qualityConfirmed, setQualityConfirmed] = useState(false);
-  const [mappingDecisions, setMappingDecisions] = useState<MappingDecisions>(emptyMappingDecisions);
-  const [mappingConfirmedKey, setMappingConfirmedKey] = useState<string | null>(null);
-  const [planDecisions, setPlanDecisions] = useState<PlanDecisions>(emptyPlanDecisions);
-  const [alpha, setAlpha] = useState(0.05);
-  const [independence, setIndependence] = useState(false);
-  const [planValidatedKey, setPlanValidatedKey] = useState<string | null>(null);
+  const [qualityConfirmed, setQualityConfirmed] = useState(() => snap?.qualityConfirmed ?? false);
+  const [mappingDecisions, setMappingDecisions] = useState<MappingDecisions>(() => (snap?.mappingDecisions as MappingDecisions) ?? emptyMappingDecisions());
+  const [mappingConfirmedKey, setMappingConfirmedKey] = useState<string | null>(() => snap?.mappingConfirmedKey ?? null);
+  const [planDecisions, setPlanDecisions] = useState<PlanDecisions>(() => (snap ? ({ ...emptyPlanDecisions(), ...(snap.planDecisions as Partial<PlanDecisions>) }) : emptyPlanDecisions()));
+  const [alpha, setAlpha] = useState(() => snap?.alpha ?? 0.05);
+  const [independence, setIndependence] = useState(() => snap?.independence ?? false);
+  const [planValidatedKey, setPlanValidatedKey] = useState<string | null>(() => snap?.planValidatedKey ?? null);
   const [execution, setExecution] = useState<Execution | null>(null);
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
-  const [view, setView] = useState<StepId | null>(null);
+  const [view, setView] = useState<StepId | null>(() => (snap?.view as StepId | null) ?? null);
   // Provenance DÉCLARÉE par l'utilisateur, rattachée à l'identifiant d'import du jeu de données (mémoire de session).
   const [provenances, setProvenances] = useState<ProvenanceRegistry>({});
-  const [skipDecisions, setSkipDecisions] = useState<SkipDecisions>({});
-  const [skipValues, setSkipValues] = useState<Record<string, string[]>>({});
-  const [structuralChoice, setStructuralChoice] = useState<Record<number, boolean>>({});
+  const [skipDecisions, setSkipDecisions] = useState<SkipDecisions>(() => (snap?.skipDecisions as SkipDecisions) ?? {});
+  const [skipValues, setSkipValues] = useState<Record<string, string[]>>(() => snap?.skipValues ?? {});
+  const [structuralChoice, setStructuralChoice] = useState<Record<number, boolean>>(() => (snap?.structuralChoice as Record<number, boolean>) ?? {});
+  // Chaîne de cohérence : corrections de l'utilisateur et empreinte de la chaîne validée.
+  const [chainDecisions, setChainDecisions] = useState<ChainDecisions>(() => (snap?.chainDecisions as ChainDecisions) ?? emptyChainDecisions());
+  const [framingConfirmedKey, setFramingConfirmedKey] = useState<string | null>(() => snap?.framingConfirmedKey ?? null);
 
   const report = useMemo(() => (research ? buildUnderstandingReport(research, emptyDecisions()) : null), [research]);
   const prepared = data.step === "prepared" ? data : null;
@@ -139,12 +173,17 @@ export default function JourneyWorkspace() {
   );
   const cartography = useMemo(() => (report && structure ? buildCartography({ report, structure, questions, links, decisions: mappingDecisions }) : null), [report, structure, questions, links, mappingDecisions]);
 
-  // Empreinte de la cartographie : concepts → colonnes + types des colonnes clés.
+  // Chaîne de cohérence : question → objectif → hypothèse → variables → questions du questionnaire.
+  const chain = useMemo(() => (research && report ? buildChain({ research, report, structure, cartography, questions, links, decisions: chainDecisions }) : null), [research, report, structure, cartography, questions, links, chainDecisions]);
+  const framingKey = chain ? hashKey(chain.rows.map((r) => [r.questionId, r.objectiveId, r.hypothesisId, r.independent, r.dependent])) : null;
+  const framingState: "none" | "confirmed" | "stale" = !framingConfirmedKey ? "none" : framingConfirmedKey === framingKey ? "confirmed" : "stale";
+
+  // Empreinte de la cartographie : concepts → colonnes, rattachement de chaque question + types des colonnes décrites.
   const mappingKey = useMemo(() => {
     if (!cartography || !variables) return null;
     const keys = cartography.units.filter((u) => u.role === "key").map((u) => u.unit.primaryColumn);
-    return hashKey([cartography.concepts.map((c) => [c.conceptKey, c.unitId]), keys.map((k) => [k, variables.find((v) => v.column === k)?.effectiveType])]);
-  }, [cartography, variables]);
+    return hashKey([cartography.concepts.map((c) => [c.conceptKey, c.unitId]), keys.map((k) => [k, variables.find((v) => v.column === k)?.effectiveType]), (chain?.assignments ?? []).map((a) => [a.unitId, a.side, a.variableKey])]);
+  }, [cartography, variables, chain]);
   const mappingState: "none" | "confirmed" | "stale" = !mappingConfirmedKey ? "none" : mappingConfirmedKey === mappingKey ? "confirmed" : "stale";
 
   const mainQuestion = research?.mainQuestion || research?.title || "";
@@ -166,8 +205,13 @@ export default function JourneyWorkspace() {
   );
   const routing = useMemo(() => orchestrate(sheet), [sheet]);
   const rawPlan = useMemo(
-    () => (report && cartography && structure && prepared && variables ? buildPlan({ report, cartography, structure, dataset: prepared.dataset, preparation: prepared.preparation, variables, instrument: instrument.kind, mainQuestion }) : null),
-    [report, cartography, structure, prepared, variables, instrument.kind, mainQuestion],
+    () =>
+      report && cartography && structure && prepared && variables
+        ? chain
+          ? buildChainPlan({ chain, report, cartography, structure, dataset: prepared.dataset, preparation: prepared.preparation, variables, instrument: instrument.kind, mainQuestion })
+          : buildPlan({ report, cartography, structure, dataset: prepared.dataset, preparation: prepared.preparation, variables, instrument: instrument.kind, mainQuestion })
+        : null,
+    [report, cartography, structure, prepared, variables, instrument.kind, mainQuestion, chain],
   );
   const plan = useMemo(() => (rawPlan ? applyRouting(rawPlan, routing) : null), [rawPlan, routing]);
   const planKey = plan ? hashKey([plan.items.map((i) => [i.id, i.feasible, i.columns, i.method]), planDecisions, independence, alpha, mappingKey]) : null;
@@ -178,6 +222,9 @@ export default function JourneyWorkspace() {
   const resultsState: "none" | "fresh" | "stale" = !currentExecution ? "none" : currentExecution.key === execKey && planState === "validated" ? "fresh" : "stale";
   const trace = useMemo(() => (currentExecution && prepared ? buildTrace({ execution: currentExecution, preparation: prepared.preparation, sheet, routing, provenance: declaredProvenance, planKey: planValidatedKey, independence }) : null), [currentExecution, prepared, sheet, routing, declaredProvenance, planValidatedKey, independence]);
   const interpretation = useMemo(() => (currentExecution && plan && report ? buildInterpretation(currentExecution, plan, report, mainQuestion, research ? { problem: research.problem, generalObjective: research.generalObjective, specificObjectives: research.specificObjectives } : undefined, { provenance, consistency, populationGaps: gaps }) : null), [currentExecution, plan, report, mainQuestion, research, provenance, consistency, gaps]);
+  // Niveaux 2 et 3 : évaluation de chaque hypothèse sur tous ses croisements, puis interprétation rattachée.
+  const assessments = useMemo(() => (chain && currentExecution ? assessChain(chain, currentExecution) : []), [chain, currentExecution]);
+  const chainInterpretation = useMemo(() => (chain && currentExecution ? interpretChain(chain, currentExecution, assessments, mainQuestion) : null), [chain, currentExecution, assessments, mainQuestion]);
   // Couverture des objectifs par les analyses retenues, visible AVANT le calcul.
   const planObjectives = useMemo(() => {
     if (!plan || !research || !report) return [];
@@ -189,6 +236,7 @@ export default function JourneyWorkspace() {
   const journey = journeySteps({
     domain: fieldConfirmed && !!field.specialty,
     research: !!research,
+    framing: framingState,
     instrument: instrumentConfirmed,
     data: !!prepared,
     quality: qualityConfirmed && !!prepared,
@@ -196,13 +244,20 @@ export default function JourneyWorkspace() {
     plan: planState,
     results: resultsState,
   });
-  const active = view && journey.steps.find((s) => s.id === view && s.state !== "todo") ? view : journey.current;
+  const chosen = view && journey.steps.find((s) => s.id === view && s.state !== "todo") ? view : journey.current;
+  // Reprise : tant que le fichier n'est pas relu, les étapes qui dépendent des données renvoient à « Mes données »
+  // (réimport demandé) ; la vue enregistrée revient d'elle-même une fois le fichier relu.
+  const awaitingFile = restore.status === "loading" || restore.status === "needs_file" || restore.status === "mismatch";
+  const active: StepId = awaitingFile && STEP_ORDER.indexOf(chosen) > STEP_ORDER.indexOf("data") ? "data" : chosen;
 
   // --- Données --------------------------------------------------------
   const read = async (file: File, options: ImportOptions) => {
     const token = ++readToken.current;
     dispatch({ type: "read_started", options });
+    setImportOptions(options);
     const bytes = new Uint8Array(await file.arrayBuffer());
+    fileBytesRef.current = bytes;
+    setFileSha(await sha256Hex(bytes));
     const result = await importFile(file.name, bytes, options);
     if (token === readToken.current) dispatch({ type: "read_finished", result });
   };
@@ -222,6 +277,9 @@ export default function JourneyWorkspace() {
   };
   const onFile = (file: File) => {
     fileRef.current = file;
+    uploadedFor.current = null;
+    setFileNotice(null);
+    if (restore.status !== "idle" && restore.status !== "done") setRestore({ status: "idle" });
     resetDownstream();
     dispatch({ type: "select_file", file: { name: file.name, size: file.size, lastModified: file.lastModified } });
     void read(file, {});
@@ -238,10 +296,12 @@ export default function JourneyWorkspace() {
     if (!variables) return;
     // Les questions de contexte décrites gardent le type affiché (déjà utilisable) : la confirmation de l'utilisateur le valide.
     const ANALYSIS: StatisticalType[] = ["nominal", "ordinal", "quantitative_discrete", "quantitative_continuous"];
+    const described = new Set([...(cartography?.units ?? []).filter((u) => u.role === "context").map((u) => u.unit.id), ...(chain?.assignments ?? []).map((a) => a.unitId)]);
     const contextTypes = Object.fromEntries(
-      (cartography?.units ?? [])
-        .filter((u) => u.role === "context" && u.unit.primaryColumn !== null)
-        .map((u) => [u.unit.primaryColumn!, variables.find((v) => v.column === u.unit.primaryColumn)?.effectiveType])
+      (structure?.units ?? [])
+        .filter((u) => described.has(u.id) && u.kind !== "technical")
+        .flatMap((u) => (u.primaryColumn !== null ? [u.primaryColumn] : u.columns))
+        .map((column) => [column, variables.find((v) => v.column === column)?.effectiveType])
         .filter((entry): entry is [number, StatisticalType] => ANALYSIS.includes(entry[1] as StatisticalType)),
     );
     const types: Record<number, StatisticalType> = { ...contextTypes, ...keyTypes };
@@ -258,10 +318,131 @@ export default function JourneyWorkspace() {
     // Empreinte calculée avec les types choisis : c'est celle qu'aura la cartographie une fois ces types appliqués.
     if (cartography) {
       const keys = cartography.units.filter((u) => u.role === "key").map((u) => u.unit.primaryColumn);
-      setMappingConfirmedKey(hashKey([cartography.concepts.map((c) => [c.conceptKey, c.unitId]), keys.map((k) => [k, (k !== null && types[k]) || variables.find((v) => v.column === k)?.effectiveType])]));
+      setMappingConfirmedKey(hashKey([cartography.concepts.map((c) => [c.conceptKey, c.unitId]), keys.map((k) => [k, (k !== null && types[k]) || variables.find((v) => v.column === k)?.effectiveType]), (chain?.assignments ?? []).map((a) => [a.unitId, a.side, a.variableKey])]));
     }
     setView("plan");
   };
+
+  // --- Sauvegarde dans le compte -------------------------------------
+  const snapshot = useMemo<JourneySnapshot>(
+    () => ({
+      version: SNAPSHOT_VERSION,
+      field,
+      fieldConfirmed,
+      overrides: overrides as Record<string, unknown>,
+      research: research as unknown as Record<string, unknown> | null,
+      chainDecisions: chainDecisions as unknown as JourneySnapshot["chainDecisions"],
+      framingConfirmedKey,
+      instrument: { kind: instrument.kind, mode: instrument.mode, text: instrument.text, acadia: instrument.acadia },
+      instrumentConfirmed,
+      // Pendant la reprise, l'état du fichier enregistré est conservé tel quel.
+      data: prepared && fileSha
+        ? { file: prepared.file, importOptions: importOptions as Record<string, unknown>, sha256: fileSha, columnCount: prepared.dataset.columnCount, rowCount: prepared.dataset.rowCount, operations: prepared.preparation.operations as JourneySnapshot["data"] extends infer D ? (D extends { operations: infer O } ? O : never) : never }
+        : restore.status !== "idle" && restore.status !== "done" ? (snap?.data ?? null) : null,
+      provenance: declaredProvenance ?? (restore.status !== "idle" && restore.status !== "done" ? (snap?.provenance ?? null) : null),
+      qualityConfirmed,
+      skipDecisions,
+      skipValues,
+      structuralChoice: structuralChoice as Record<string, boolean>,
+      mappingDecisions: mappingDecisions as unknown as JourneySnapshot["mappingDecisions"],
+      mappingConfirmedKey,
+      planDecisions: planDecisions as unknown as Record<string, unknown>,
+      alpha,
+      independence,
+      planValidatedKey,
+      hadResults: !!execution || (snap?.hadResults ?? false),
+      view,
+    }),
+    [field, fieldConfirmed, overrides, research, chainDecisions, framingConfirmedKey, instrument, instrumentConfirmed, prepared, fileSha, importOptions, restore.status, snap, declaredProvenance, qualityConfirmed, skipDecisions, skipValues, structuralChoice, mappingDecisions, mappingConfirmedKey, planDecisions, alpha, independence, planValidatedKey, execution, view],
+  );
+  const summary: SessionSummary = {
+    stageLabel: STEP_LABELS[journey.current],
+    progress: journey.stages.filter((s) => s.state === "done").length,
+    verdicts: assessments.map((a) => ({ label: a.label, verdict: CHAIN_VERDICT_LABELS[a.verdict] })),
+    dataFile: (prepared?.file.name ?? snap?.data?.file.name ?? null)?.slice(0, 260) ?? null,
+  };
+  const persistence = useJourneyPersistence({
+    sessionId,
+    revision: initial?.revision ?? 0,
+    snapshot,
+    title: (research?.title || prepared?.file.name || initial?.title || "Interprétation sans titre").slice(0, 200),
+    stage: journey.current,
+    summary,
+    enabled: fieldConfirmed || !!research,
+    paused: restore.status === "loading",
+  });
+
+  // Reprise : relit le fichier, vérifie son empreinte, puis rejoue les décisions de préparation.
+  const restoreFrom = async (bytes: Uint8Array, meta: { name: string; size: number; lastModified: number }) => {
+    const saved = snap?.data;
+    if (!saved) return;
+    const result = await importFile(meta.name, bytes, saved.importOptions as ImportOptions);
+    if (!result.ok) {
+      setRestore({ status: "needs_file", message: "Le fichier n'a pas pu être relu : réimportez-le." });
+      return;
+    }
+    const { preparation, dropped } = replayOperations(saved.operations as unknown as PreparationOperation[], result.dataset);
+    fileBytesRef.current = bytes;
+    setFileSha(saved.sha256);
+    setImportOptions(saved.importOptions as ImportOptions);
+    dispatch({ type: "restore", file: meta, dataset: result.dataset, preparation });
+    if (snap?.provenance) setProvenances((r) => declareProvenance(r, result.dataset.importId, snap.provenance as DataProvenance));
+    uploadedFor.current = result.dataset.importId;
+    setRestore({ status: "done", message: dropped ? `${dropped} décision(s) de préparation ne correspondaient plus au fichier et n'ont pas été rejouées.` : undefined });
+  };
+  const restoreStarted = useRef(false);
+  useEffect(() => {
+    if (restoreStarted.current || restore.status !== "loading" || !sessionId || !snap?.data) return;
+    restoreStarted.current = true;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/journey/sessions/${sessionId}/file`, { cache: "no-store" });
+        if (!res.ok) throw new Error("indisponible");
+        const raw = new Uint8Array(await res.arrayBuffer());
+        const bytes = res.headers.get("X-Acadia-Format") === "csv-gzip" ? gunzipSync(raw) : raw;
+        if ((await sha256Hex(bytes)) !== snap.data!.sha256) throw new Error("empreinte");
+        await restoreFrom(bytes, snap.data!.file);
+      } catch {
+        setRestore({ status: "needs_file", message: "Votre fichier n'a pas pu être récupéré automatiquement : réimportez-le pour retrouver vos données." });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restore.status, sessionId]);
+  // Réimport à la reprise : même fichier (empreinte identique) → décisions rejouées ; sinon, l'utilisateur choisit.
+  const onResumeFile = async (file: File) => {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if ((await sha256Hex(bytes)) === snap?.data?.sha256) {
+      await restoreFrom(bytes, { name: file.name, size: file.size, lastModified: file.lastModified });
+      return;
+    }
+    fileRef.current = file;
+    setRestore({ status: "mismatch", message: `« ${file.name} » n'est pas le fichier enregistré (« ${snap?.data?.file.name} ») : son contenu est différent.` });
+  };
+
+  // Copie privée du fichier dans le compte (avec consentement), une fois par import.
+  useEffect(() => {
+    if (!prepared || !keepFile || !persistence.sessionId || !fileBytesRef.current || !fileSha) return;
+    if (uploadedFor.current === prepared.dataset.importId) return;
+    uploadedFor.current = prepared.dataset.importId;
+    const format = prepared.dataset.format === "xlsx" ? "xlsx" : "csv";
+    void persistence.uploadFile(fileBytesRef.current, prepared.file.name, format, fileSha).then((r) => setFileNotice(r.ok ? "Copie privée de votre fichier conservée dans votre compte." : (r.message ?? null)));
+  }, [prepared, keepFile, persistence, fileSha]);
+
+  // Reprise : les résultats enregistrés ne sont pas stockés comme des faits ; ils sont recalculés par les mêmes moteurs.
+  const autoRan = useRef(false);
+  useEffect(() => {
+    if (autoRan.current || !snap?.hadResults || execution || running) return;
+    if (snap.data && restore.status !== "done") return;
+    if (!plan || !prepared || !variables || !planKey || !execKey || planKey !== planValidatedKey) return;
+    autoRan.current = true;
+    try {
+      // Recalcul unique à la reprise (les résultats enregistrés ne sont jamais réaffichés sans être recalculés).
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setExecution(executePlan({ plan, decisions: planDecisions, dataset: prepared.dataset, preparation: prepared.preparation, variables, alpha, independenceConfirmed: independence, key: execKey, structural }));
+    } catch (e) {
+      setRunError(e instanceof Error ? e.message : String(e));
+    }
+  }, [snap, execution, running, restore.status, plan, prepared, variables, planKey, execKey, planValidatedKey, planDecisions, alpha, independence, structural]);
 
   // Calcul : état « en cours » affiché, puis résultats ou erreur explicite (jamais de résultat de remplacement).
   const runPlan = () => {
@@ -304,7 +485,11 @@ export default function JourneyWorkspace() {
         <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/10 blur-2xl" aria-hidden />
         <p className="relative text-xs font-bold uppercase tracking-[0.18em] text-indigo-100">Parcours guidé</p>
         <h1 className="relative mt-1 text-xl font-extrabold leading-tight sm:text-3xl">De votre question de recherche aux résultats</h1>
-        <p className="relative mt-2 max-w-3xl text-sm leading-relaxed text-indigo-50">Six étapes ; vous confirmez chaque décision. Calculs effectués dans votre navigateur, sans IA ; données perdues au rechargement de la page.</p>
+        <p className="relative mt-2 max-w-3xl text-sm leading-relaxed text-indigo-50">Six étapes ; vous confirmez chaque décision. Calculs effectués dans votre navigateur, sans IA ; votre travail est enregistré dans votre compte.</p>
+        <p className="relative mt-3 inline-flex flex-wrap items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-white ring-1 ring-white/25" role="status" aria-label="État de la sauvegarde">
+          {SAVE_LABELS[persistence.status]}
+          {persistence.status === "conflict" ? <button type="button" className="underline" onClick={() => window.location.reload()}>Recharger la dernière version</button> : null}
+        </p>
       </header>
 
       <nav aria-label="Étapes du parcours" className="rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm sm:p-4">
@@ -404,8 +589,21 @@ export default function JourneyWorkspace() {
               setResearch(input);
               setView("research");
             }}
-            onContinue={() => setView("instrument")}
+            onContinue={() => setView("framing")}
             analyzed={research}
+          />
+        ) : null}
+        {active === "framing" && chain ? (
+          <FramingStep
+            chain={chain}
+            confirmed={framingState === "confirmed"}
+            stale={framingState === "stale"}
+            onChange={(rowId, patch) => setChainDecisions((d) => ({ ...d, rows: { ...d.rows, [rowId]: { ...d.rows[rowId], ...patch } } }))}
+            onConfirm={() => {
+              setChainDecisions((d) => ({ ...d, rows: Object.fromEntries(chain.rows.map((r) => [r.id, { ...d.rows[r.id], confirmed: true }])) }));
+              setFramingConfirmedKey(framingKey);
+              setView("instrument");
+            }}
           />
         ) : null}
         {active === "instrument" ? (
@@ -426,7 +624,34 @@ export default function JourneyWorkspace() {
         {active === "data" ? (
           <Section title="3. Mes données : votre fichier" description="Fichier CSV ou Excel exporté de votre outil de collecte. Le fichier est lu dans votre navigateur : il n'est envoyé nulle part.">
             <div className="space-y-4">
-              {data.step === "empty" ? <FileDropZone onFile={onFile} /> : null}
+              {restore.status === "needs_file" || restore.status === "mismatch" ? (
+                <Notice tone={restore.status === "mismatch" ? "warning" : "info"} title={restore.status === "mismatch" ? "Ce n'est pas le même fichier" : `Reprise : réimportez « ${snap?.data?.file.name ?? "votre fichier"} »`}>
+                  <p>{restore.message ?? "Vos décisions sont enregistrées ; votre fichier de données n'a pas été conservé. Réimportez-le : s'il est identique, ACADIA rejoue toutes vos décisions."}</p>
+                  {restore.status === "mismatch" ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button type="button" className={buttonClass.secondary} onClick={() => fileRef.current && onFile(fileRef.current)}>
+                        Utiliser ce nouveau fichier (décisions sur les données à refaire)
+                      </button>
+                      <button type="button" className={buttonClass.ghost} onClick={() => setRestore({ status: "needs_file" })}>
+                        Choisir un autre fichier
+                      </button>
+                    </div>
+                  ) : null}
+                </Notice>
+              ) : null}
+              {restore.status === "needs_file" && data.step === "empty" ? <FileDropZone onFile={(file) => void onResumeFile(file)} /> : null}
+              {restore.status === "loading" ? (
+                <p className="flex items-center gap-2 text-sm text-slate-700" role="status">
+                  <Loader2 size={18} className="animate-spin text-indigo-600" aria-hidden /> Récupération de votre fichier…
+                </p>
+              ) : null}
+              {data.step === "empty" && restore.status !== "needs_file" && restore.status !== "loading" && restore.status !== "mismatch" ? <FileDropZone onFile={onFile} /> : null}
+              <label className="flex items-start gap-2 text-sm text-slate-700">
+                <input type="checkbox" className="mt-0.5 h-4 w-4" checked={keepFile} onChange={(e) => setKeepFile(e.target.checked)} />
+                <span>Conserver une copie privée de mon fichier dans mon compte, pour reprendre plus tard sans le réimporter (supprimée avec l&apos;interprétation).</span>
+              </label>
+              {fileNotice ? <p className="text-xs text-slate-600">{fileNotice}</p> : null}
+              {restore.status === "done" && restore.message ? <Notice tone="warning">{restore.message}</Notice> : null}
               {data.step === "reading" || data.step === "preview" ? (
                 <PreviewStep
                   state={data}
@@ -487,6 +712,7 @@ export default function JourneyWorkspace() {
             }}
           />
         ) : null}
+        {active === "variables" && chain && structure ? <CoherenceMatrix chain={chain} onAssign={(unitId, side, variableKey) => setChainDecisions((d) => ({ ...d, assignments: { ...d.assignments, [unitId]: { side, variableKey } } }))} /> : null}
         {active === "variables" && cartography && variables && structure ? (
           <VariablesStep
             cartography={cartography}
@@ -534,7 +760,7 @@ export default function JourneyWorkspace() {
               {runError} Aucun résultat n&apos;est affiché à la place.
             </Notice>
           ) : currentExecution && interpretation ? (
-            <ResultsStep execution={currentExecution} interpretation={interpretation} trace={trace} perspective={routing.perspective} question={mainQuestion} stale={resultsState === "stale"} onRerun={runPlan} onEditPlan={() => setView("plan")} />
+            <ResultsStep execution={currentExecution} interpretation={interpretation} chain={chain} assessments={assessments} chainInterpretation={chainInterpretation} trace={trace} perspective={routing.perspective} question={mainQuestion} stale={resultsState === "stale"} onRerun={runPlan} onEditPlan={() => setView("plan")} />
           ) : (
             <Notice tone="info" title="Pas encore de résultats">
               Validez le plan d&apos;analyse pour lancer les calculs.

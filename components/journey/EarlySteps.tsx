@@ -21,6 +21,7 @@ interface ResearchForm {
   title: string;
   problem: string;
   mainQuestion: string;
+  specificQuestions: string;
   generalObjective: string;
   specificObjectives: string;
   hypotheses: string;
@@ -29,7 +30,7 @@ interface ResearchForm {
   period: string;
 }
 
-const EMPTY: ResearchForm = { title: "", problem: "", mainQuestion: "", generalObjective: "", specificObjectives: "", hypotheses: "", population: "", field: "", period: "" };
+const EMPTY: ResearchForm = { title: "", problem: "", mainQuestion: "", specificQuestions: "", generalObjective: "", specificObjectives: "", hypotheses: "", population: "", field: "", period: "" };
 
 /** Exemple de SAISIE (cas de validation) : ce sont des entrées, jamais des résultats. */
 const EXAMPLE: ResearchForm = {
@@ -37,8 +38,9 @@ const EXAMPLE: ResearchForm = {
   title: "La disponibilité d'une garantie est-elle associée au résultat de la dernière demande de crédit des entrepreneures ?",
   mainQuestion: "La disponibilité d'une garantie est-elle associée au résultat de la dernière demande de crédit des entrepreneures ?",
   problem: "Les femmes entrepreneures se voient souvent refuser des crédits, et l'absence de garantie est souvent avancée comme explication.",
+  specificQuestions: "Quel est le niveau de disponibilité des garanties chez les entrepreneures ?\nLa disponibilité d'une garantie est-elle associée au résultat de la dernière demande de crédit ?",
   generalObjective: "Examiner la relation entre la disponibilité d'une garantie et le résultat de la dernière demande de crédit.",
-  specificObjectives: "Décrire la disponibilité d'une garantie chez les entrepreneures.\nDécrire le résultat de la dernière demande de crédit.",
+  specificObjectives: "Décrire la disponibilité des garanties chez les entrepreneures.\nExaminer la relation entre la disponibilité d'une garantie et le résultat de la dernière demande de crédit.",
   hypotheses: "La disponibilité d'une garantie est associée au résultat de la dernière demande de crédit.",
   population: "Femmes entrepreneures membres de tontines",
   field: "Lubumbashi",
@@ -56,6 +58,7 @@ const FIELDS: Array<{ key: keyof ResearchForm; label: string; group: FieldGroup;
   { key: "title", label: "Sujet ou titre provisoire", group: "essential", required: true },
   { key: "mainQuestion", label: "Question principale de recherche", group: "essential", rows: 2 },
   { key: "problem", label: "Problématique", group: "framework", rows: 2, help: "Le constat ou la difficulté de départ." },
+  { key: "specificQuestions", label: "Questions spécifiques de recherche (une par ligne)", group: "framework", rows: 3, help: "Chaque question appelle un objectif, puis une hypothèse : ACADIA les relie pour vous." },
   { key: "generalObjective", label: "Objectif général", group: "framework", rows: 2 },
   { key: "specificObjectives", label: "Objectifs spécifiques (un par ligne)", group: "framework", rows: 3, help: "Un objectif par ligne ; ils seront confrontés aux résultats." },
   { key: "hypotheses", label: "Hypothèses (une par ligne)", group: "framework", rows: 2, help: "Laissez vide si votre étude n'en comporte pas." },
@@ -82,7 +85,7 @@ function useUnderstandingDraft(): boolean {
 
 function toForm(input: ResearchUnderstandingInput | null): ResearchForm {
   if (!input) return EMPTY;
-  return { title: input.title, problem: input.problem, mainQuestion: input.mainQuestion, generalObjective: input.generalObjective, specificObjectives: input.specificObjectives.join("\n"), hypotheses: input.hypotheses.join("\n"), population: input.population, field: input.field, period: input.period };
+  return { title: input.title, problem: input.problem, mainQuestion: input.mainQuestion, specificQuestions: input.specificQuestions.join("\n"), generalObjective: input.generalObjective, specificObjectives: input.specificObjectives.join("\n"), hypotheses: input.hypotheses.join("\n"), population: input.population, field: input.field, period: input.period };
 }
 
 export function ResearchStep({ report, analyzed, onAnalyze, onContinue }: { report: UnderstandingReport | null; analyzed: ResearchUnderstandingInput | null; onAnalyze: (input: ResearchUnderstandingInput) => void; onContinue: () => void }) {
@@ -102,6 +105,7 @@ export function ResearchStep({ report, analyzed, onAnalyze, onContinue }: { repo
               title: currentProject.title,
               problem: currentProject.problem?.statement ?? "",
               mainQuestion: (currentProject.researchQuestions.find((q) => q.type !== "secondary") ?? currentProject.researchQuestions[0])?.text ?? "",
+              specificQuestions: currentProject.researchQuestions.filter((q) => q.type === "secondary").map((q) => q.text).join("\n"),
               generalObjective: currentProject.objectives.find((o) => o.role === "general")?.text ?? "",
               specificObjectives: currentProject.objectives.filter((o) => o.role === "specific").map((o) => o.text).join("\n"),
               hypotheses: currentProject.hypotheses.map((h) => h.statement).join("\n"),
@@ -117,7 +121,7 @@ export function ResearchStep({ report, analyzed, onAnalyze, onContinue }: { repo
   const set = (key: keyof ResearchForm, value: string) => setForm((f) => ({ ...f, [key]: value }));
 
   const analyze = (): boolean => {
-    const validation = validateResearchInput({ ...form, hypotheses: splitLines(form.hypotheses), specificObjectives: splitLines(form.specificObjectives) });
+    const validation = validateResearchInput({ ...form, hypotheses: splitLines(form.hypotheses), specificObjectives: splitLines(form.specificObjectives), specificQuestions: splitLines(form.specificQuestions) });
     if (!validation.ok) {
       setErrors(validation.errors);
       return false;
@@ -132,7 +136,7 @@ export function ResearchStep({ report, analyzed, onAnalyze, onContinue }: { repo
     try {
       const raw = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? "null") as { form?: Record<string, string> } | null;
       const f = raw?.form;
-      if (f && typeof f.title === "string") setForm({ title: f.title, problem: f.problem ?? "", mainQuestion: f.mainQuestion ?? "", generalObjective: f.generalObjective ?? "", specificObjectives: f.specificObjectives ?? "", hypotheses: f.hypotheses ?? "", population: f.population ?? "", field: f.field ?? "", period: f.period ?? "" });
+      if (f && typeof f.title === "string") setForm({ title: f.title, problem: f.problem ?? "", mainQuestion: f.mainQuestion ?? "", specificQuestions: f.specificQuestions ?? "", generalObjective: f.generalObjective ?? "", specificObjectives: f.specificObjectives ?? "", hypotheses: f.hypotheses ?? "", population: f.population ?? "", field: f.field ?? "", period: f.period ?? "" });
     } catch {
       // Brouillon illisible : ignoré.
     }

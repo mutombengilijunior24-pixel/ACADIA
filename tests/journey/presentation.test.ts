@@ -40,7 +40,8 @@ const SEX = 15;
 const MEN = ["S1003", "S1010", "S1017", "S1030", "S1044"];
 
 function withSex(): string {
-  const lines = readFileSync("tests/fixtures/acadia-parcours-credit-50.csv", "utf8").split("\n");
+  // Fins de ligne Windows ou Unix : le dépôt peut extraire le fichier dans l'un ou l'autre format.
+  const lines = readFileSync("tests/fixtures/acadia-parcours-credit-50.csv", "utf8").split(/\r?\n/);
   return lines.map((line, i) => (!line.trim() ? line : i === 0 ? `${line};"Sexe"` : `${line};"${MEN.some((id) => line.startsWith(`"${id}"`)) ? "Homme" : "Femme"}"`)).join("\n");
 }
 
@@ -205,14 +206,14 @@ describe("Parcours en six étapes visibles", () => {
   it("Domaine → Sujet → Données → Vérification → Plan → Résultats, avec sous-étapes internes", () => {
     expect(STAGES.map((s) => s.label)).toEqual(["Mon domaine et ma spécialité", "Mon sujet de recherche", "Mes données", "Vérification des données", "Plan d'analyse proposé", "Résultats et interprétation"]);
     expect(STAGES.flatMap((s) => s.steps)).toEqual(STEP_ORDER);
-    const done = journeySteps({ domain: true, research: true, instrument: true, data: true, quality: true, mapping: "confirmed", plan: "validated", results: "fresh" });
+    const done = journeySteps({ domain: true, research: true, framing: "confirmed", instrument: true, data: true, quality: true, mapping: "confirmed", plan: "validated", results: "fresh" });
     expect(done.stages.every((s) => s.state === "done")).toBe(true);
     expect(done.nextAction).toContain("téléchargez le rapport");
-    const partial = journeySteps({ domain: true, research: true, instrument: true, data: false, quality: false, mapping: "none", plan: "none", results: "none" });
+    const partial = journeySteps({ domain: true, research: true, framing: "confirmed", instrument: true, data: false, quality: false, mapping: "none", plan: "none", results: "none" });
     expect(partial.current).toBe("data");
     expect(partial.stages.find((s) => s.id === "data")?.state).toBe("current");
     expect(partial.stages.find((s) => s.id === "verification")?.state).toBe("todo");
-    const start = journeySteps({ domain: false, research: false, instrument: false, data: false, quality: false, mapping: "none", plan: "none", results: "none" });
+    const start = journeySteps({ domain: false, research: false, framing: "none", instrument: false, data: false, quality: false, mapping: "none", plan: "none", results: "none" });
     expect(start.current).toBe("domain");
   });
 });

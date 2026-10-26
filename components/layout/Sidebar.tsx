@@ -17,6 +17,7 @@ import {
   ClipboardCheck,
   BookOpenCheck,
   FileSpreadsheet,
+  FolderOpen,
 } from "lucide-react";
 import Logo from "@/components/shared/Logo";
 import { useAuth } from "@/contexts/AuthContext";
@@ -32,6 +33,7 @@ const menuItems = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { title: "Mes recherches", href: "/dashboard/research", icon: FileSearch },
   { title: "Interpréter mes données", href: "/dashboard/journey", icon: FileSpreadsheet },
+  { title: "Mes interprétations", href: "/dashboard/interpretations", icon: FolderOpen },
   { title: "Survey", href: "/dashboard/survey", icon: ClipboardList },
   { title: "Paramètres", href: "/dashboard/settings", icon: Settings },
 ];

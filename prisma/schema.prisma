@@ -53,6 +53,7 @@ model User {
   teacherProfile    TeacherProfile?
   resetTokens       PasswordResetToken[]
   researchProjects  ResearchProject[]    @relation("ResearchOwner")
+  journeySessions   JourneySession[]     @relation("JourneySessionOwner")
   cohortMemberships CohortMembership[]   @relation("CohortMembershipStudent")
 
   canevasList             SupervisionCanevas[]    @relation("CanevasSupervisor")
@@ -1334,4 +1335,37 @@ model EvaluationFeedback {
   evaluation Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
 
   @@index([evaluationId])
+}
+
+// ============================================================
+// PARCOURS GUIDÉ D'INTERPRÉTATION — interprétations enregistrées par compte.
+// payload : instantané JSON (versionné) des décisions du chercheur ;
+// les résultats sont recalculés à la reprise (jamais stockés comme faits).
+// Le fichier de données (facultatif, avec consentement) est dans le stockage
+// de documents ; sa propriété est portée par fileDocumentId.
+// ============================================================
+model JourneySession {
+  id             String    @id
+  ownerId        String
+  title          String
+  /// Moteur d'interprétation : "survey" (parcours général) ou "finance" (gestion financière). Jamais modifié après création.
+  kind           String    @default("survey")
+  status         String    @default("active")
+  stage          String    @default("domain")
+  schemaVersion  Int       @default(1)
+  payload        String
+  payloadBytes   Int       @default(0)
+  revision       Int       @default(0)
+  summary        String?
+  fileName       String?
+  fileSize       Int?
+  fileSha256     String?
+  fileDocumentId String?   @unique
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  lastOpenedAt   DateTime?
+
+  owner User @relation("JourneySessionOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, updatedAt])
 }

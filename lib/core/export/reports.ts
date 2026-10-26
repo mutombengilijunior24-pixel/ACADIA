@@ -131,7 +131,7 @@ export function journeySheets(input: { question: string; execution: Execution; i
 /* Document de rapport (HTML imprimable, Word)                         */
 /* ================================================================= */
 
-function descriptiveBlocks(r: VariableDescriptive, palette: string[], structural?: { values: string[]; count: number }): Block[] {
+export function descriptiveBlocks(r: VariableDescriptive, palette: string[], structural?: { values: string[]; count: number }): Block[] {
   const blocks: Block[] = [{ type: "h3", text: r.header }];
   if (structural) blocks.push({ type: "meta", text: `Question conditionnelle : pourcentages calculés sur ${r.valid} répondant(s) éligible(s) ; ${structural.count} réponse(s) « ${structural.values.join(" / ")} » hors dénominateur.` });
   if (r.kind === "quantitative") {

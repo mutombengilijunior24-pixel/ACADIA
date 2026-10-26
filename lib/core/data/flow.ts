@@ -29,6 +29,8 @@ export type ImportFlowAction =
   | { type: "back_to_preview" }
   | { type: "reset" }
   | { type: "operation"; input: OperationInput }
+  /** Reprise d'une interprétation enregistrée : fichier relu et décisions de préparation rejouées. */
+  | { type: "restore"; file: FileMeta; dataset: ImportedDataset; preparation: PreparationState }
   | { type: "undo"; operationId: string };
 
 export const initialImportFlow: ImportFlowState = { step: "empty" };
@@ -52,6 +54,8 @@ export function importFlowReducer(state: ImportFlowState, action: ImportFlowActi
       return { step: "preview", file: state.file, options: {}, result: { ok: true, dataset: state.dataset } };
     case "reset":
       return initialImportFlow;
+    case "restore":
+      return { step: "prepared", file: action.file, dataset: action.dataset, preparation: action.preparation };
     case "operation":
       if (state.step !== "prepared") return state;
       return { ...state, preparation: addOperation(state.preparation, action.input) };

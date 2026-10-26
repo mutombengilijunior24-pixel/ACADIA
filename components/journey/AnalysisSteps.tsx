@@ -258,8 +258,38 @@ export function PlanStep({
     <div className="space-y-5">
       <Section title="5. Plan d'analyse proposé" description="Construit à partir de votre question, de vos hypothèses et des variables confirmées. Acceptez, écartez, modifiez ou réordonnez les analyses : aucun calcul n'est lancé avant votre validation.">
         {planState === "stale" ? <p className="mb-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Le plan a changé depuis votre validation : validez-le à nouveau.</p> : null}
+        {items.some((i) => i.chain?.unitId) ? (
+          <details className="mb-3 rounded-2xl border border-slate-200 p-4 text-sm" open>
+            <summary className="cursor-pointer font-bold text-slate-900">
+              Niveau 1 — Description de toutes les questions ({items.filter((i) => i.chain?.unitId).length}) : un tableau et un graphique pour chacune
+            </summary>
+            <ul className="mt-3 divide-y divide-slate-100">
+              {items
+                .filter((i) => i.chain?.unitId)
+                .map((item) => {
+                  const status = itemStatus(item, decisions);
+                  return (
+                    <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                      <span className="min-w-0 flex-1">
+                        <span className={`font-medium ${status === "accepted" ? "text-slate-900" : "text-slate-400 line-through"}`}>{item.title}</span>
+                        <span className="block text-xs text-slate-500">{item.feasible ? (item.variables[0]?.role ?? "") : item.blocker}</span>
+                      </span>
+                      {item.feasible ? (
+                        <button type="button" className={buttonClass.ghost} onClick={() => onDecisions({ ...decisions, status: { ...decisions.status, [item.id]: status === "accepted" ? "rejected" : "accepted" } })} aria-label={`${status === "accepted" ? "Ne pas décrire" : "Décrire"} : ${item.title}`}>
+                          {status === "accepted" ? "Ne pas décrire" : "Décrire"}
+                        </button>
+                      ) : (
+                        <Pill tone="neutral">Non décrite</Pill>
+                      )}
+                    </li>
+                  );
+                })}
+            </ul>
+          </details>
+        ) : null}
+        {items.some((i) => i.chain?.unitId) && items.some((i) => i.level === "relation") ? <h3 className="mb-2 mt-4 font-bold text-slate-900">Niveau 2 — Croisements des questions de la VI avec celles de la VD</h3> : null}
         <ol className="space-y-3">
-          {items.map((item, index) => {
+          {items.filter((i) => !i.chain?.unitId).map((item, index) => {
             const status = itemStatus(item, decisions);
             const method = methodOf(item, decisions);
             return (

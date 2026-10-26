@@ -4,12 +4,13 @@
  * signale « à revoir » sans effacer les décisions déjà prises.
  * Les étapes internes sont regroupées en six étapes visibles pour le chercheur.
  */
-export type StepId = "domain" | "research" | "instrument" | "data" | "quality" | "variables" | "plan" | "results";
+export type StepId = "domain" | "research" | "framing" | "instrument" | "data" | "quality" | "variables" | "plan" | "results";
 export type StageId = "domain" | "research" | "data" | "verification" | "plan" | "results";
 
 export const STEP_LABELS: Record<StepId, string> = {
   domain: "Domaine et spécialité",
   research: "Sujet de recherche",
+  framing: "Cohérence de ma recherche",
   instrument: "Mode de collecte",
   data: "Fichier",
   quality: "Qualité des données",
@@ -20,7 +21,7 @@ export const STEP_LABELS: Record<StepId, string> = {
 
 export const STAGES: Array<{ id: StageId; label: string; steps: StepId[]; purpose: string }> = [
   { id: "domain", label: "Mon domaine et ma spécialité", steps: ["domain"], purpose: "La perspective scientifique de votre étude." },
-  { id: "research", label: "Mon sujet de recherche", steps: ["research"], purpose: "Votre question, vos objectifs et vos hypothèses." },
+  { id: "research", label: "Mon sujet de recherche", steps: ["research", "framing"], purpose: "Votre question, vos objectifs, vos hypothèses et leur cohérence." },
   { id: "data", label: "Mes données", steps: ["instrument", "data"], purpose: "Comment les données ont été collectées, puis votre fichier." },
   { id: "verification", label: "Vérification des données", steps: ["quality", "variables"], purpose: "Qualité des données, type de données reconnu et correspondance des variables." },
   { id: "plan", label: "Plan d'analyse proposé", steps: ["plan"], purpose: "Les moteurs et analyses proposés, à valider avant tout calcul." },
@@ -33,6 +34,7 @@ export const stageOf = (step: StepId) => STAGES.find((s) => s.steps.includes(ste
 export const STEP_PURPOSE: Record<StepId, string> = {
   domain: "La perspective scientifique de votre étude.",
   research: "Votre question, vos objectifs et vos hypothèses.",
+  framing: "Chaque question reliée à son objectif, son hypothèse et ses variables.",
   instrument: "Comment les données ont été collectées.",
   data: "Votre fichier de données.",
   quality: "Un état des données vérifié.",
@@ -48,6 +50,8 @@ export const STEP_STATE_LABELS: Record<StepState, string> = { done: "Confirmée"
 export interface JourneyFlags {
   domain: boolean;
   research: boolean;
+  /** Chaîne question → objectif → hypothèse → variables validée (ou à revoir après modification). */
+  framing: "none" | "confirmed" | "stale";
   instrument: boolean;
   data: boolean;
   quality: boolean;
@@ -59,6 +63,7 @@ export interface JourneyFlags {
 const NEXT_ACTION: Record<StepId, string> = {
   domain: "Choisissez votre domaine et votre spécialité.",
   research: "Décrivez votre recherche (au minimum le sujet) puis cliquez sur « Analyser ma recherche ».",
+  framing: "Vérifiez les liens proposés entre vos questions, objectifs, hypothèses et variables, puis validez la chaîne.",
   instrument: "Indiquez comment vos données ont été collectées (questionnaire, entretiens, documents…).",
   data: "Importez votre fichier de données (CSV ou Excel).",
   quality: "Indiquez la provenance des données, vérifiez le type de données reconnu et les décisions demandées, puis confirmez.",
@@ -67,7 +72,7 @@ const NEXT_ACTION: Record<StepId, string> = {
   results: "Lisez la synthèse, puis téléchargez le rapport.",
 };
 
-export const STEP_ORDER: StepId[] = ["domain", "research", "instrument", "data", "quality", "variables", "plan", "results"];
+export const STEP_ORDER: StepId[] = ["domain", "research", "framing", "instrument", "data", "quality", "variables", "plan", "results"];
 
 export interface JourneyState {
   steps: Array<{ id: StepId; label: string; state: StepState }>;
@@ -80,6 +85,7 @@ export function journeySteps(flags: JourneyFlags): JourneyState {
   const done: Record<StepId, boolean> = {
     domain: flags.domain,
     research: flags.research,
+    framing: flags.framing === "confirmed",
     instrument: flags.instrument,
     data: flags.data,
     quality: flags.quality,
@@ -90,6 +96,7 @@ export function journeySteps(flags: JourneyFlags): JourneyState {
   const stale: Record<StepId, boolean> = {
     domain: false,
     research: false,
+    framing: flags.framing === "stale",
     instrument: false,
     data: false,
     quality: false,

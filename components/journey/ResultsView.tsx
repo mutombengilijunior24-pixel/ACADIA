@@ -9,6 +9,10 @@ import { ExportBar } from "@/components/export/ExportBar";
 import { fmt, fmtP, type AnalysisReport } from "@/lib/core/analysis/inferential";
 import { journeyDocument, journeySheets } from "@/lib/core/export/reports";
 import { traceLines, type ResultTrace } from "@/lib/core/orchestrator";
+import type { ChainInterpretation, HypothesisAssessment, ResearchChain } from "@/lib/core/chain";
+import { chainJourneyDocument, chainJourneySheets } from "@/lib/core/export/chainReports";
+
+import { ChainSynthesis, DescriptiveLevel, InferentialLevel, InterpretationLevel } from "./ResultsChain";
 import { cleanHeader, isIllustrative, OBJECTIVE_LABELS, VERDICT_LABELS, type Execution, type Interpretation, type ObjectiveStatus, type Paragraph } from "@/lib/core/journey";
 
 const OBJECTIVE_TONE: Record<ObjectiveStatus, "green" | "blue" | "yellow" | "red"> = { tested: "green", described: "blue", partial: "yellow", not_addressed: "red" };
@@ -96,7 +100,13 @@ export function ResultsStep({
   onEditPlan,
   trace,
   perspective,
+  chain,
+  assessments,
+  chainInterpretation,
 }: {
+  chain?: ResearchChain | null;
+  assessments?: HypothesisAssessment[];
+  chainInterpretation?: ChainInterpretation | null;
   trace: ResultTrace | null;
   perspective: string | null;
   execution: Execution;
@@ -114,6 +124,75 @@ export function ResultsStep({
   };
   const provenance = interpretation.provenance;
   const context = { perspective, trace: trace ? traceLines(trace) : undefined };
+  const staleNotice = stale ? (
+    <Notice
+      tone="stale"
+      action={
+        <button type="button" className={buttonClass.secondary} onClick={onRerun}>
+          Relancer les calculs
+        </button>
+      }
+    >
+      Les données, les variables ou le plan ont changé depuis ces calculs : ces résultats sont périmés et ne doivent pas être utilisés tels quels.
+    </Notice>
+  ) : null;
+  const traceSection = trace ? (
+    <Section title="Traçabilité" description="À quoi ces résultats sont rattachés : s'il change, les résultats sont signalés périmés.">
+      <details>
+        <summary className="cursor-pointer text-sm font-medium text-slate-700">Voir la source, la version des données, les décisions, les moteurs et les paramètres</summary>
+        <dl className="mt-3 grid gap-x-4 gap-y-2 text-sm sm:grid-cols-[minmax(0,14rem)_1fr]">
+          {traceLines(trace).map(([k, v]) => (
+            <div key={k} className="contents">
+              <dt className="font-medium text-slate-800">{k}</dt>
+              <dd className="break-words text-slate-600">{v}</dd>
+            </div>
+          ))}
+        </dl>
+      </details>
+    </Section>
+  ) : null;
+
+  // Résultats organisés par la chaîne de cohérence : synthèse, puis les trois niveaux.
+  if (chain && chainInterpretation) {
+    const reportInput = { question, execution, interpretation, chain, assessments: assessments ?? [], chainInterpretation, context };
+    const failed = execution.items.filter((e) => e.kind === "relation" && !e.outcome.ok);
+    return (
+      <div className="space-y-5">
+        {staleNotice}
+        <Section title="6. Résultats et interprétation" description="La synthèse d'abord, puis les trois niveaux : interprétation descriptive, statistique inférentielle et interprétation rattachée à votre recherche.">
+          <div className="space-y-4">
+            <div className="rounded-xl bg-indigo-50/70 p-3 text-sm text-indigo-950">
+              <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">Question étudiée</p>
+              <p className="mt-0.5 font-medium">« {question} »</p>
+            </div>
+            <p className={`rounded-xl border p-3 text-sm ${isIllustrative(provenance.value.kind) ? "border-amber-300 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-700"}`} role="note">
+              <span className="font-semibold">{provenance.statement}</span> {provenance.warning}
+            </p>
+            {perspective ? (
+              <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
+                <span className="font-semibold">Perspective d&apos;interprétation : </span>
+                {perspective}
+              </p>
+            ) : null}
+            <ChainSynthesis chain={chain} assessments={assessments ?? []} interpretation={chainInterpretation} />
+            {failed.map((e) =>
+              e.kind === "relation" && !e.outcome.ok ? (
+                <Notice key={e.item.id} tone="error" title={`${e.item.title} : calcul non effectué`} action={<button type="button" className={buttonClass.secondary} onClick={onEditPlan}>Revoir le plan</button>}>
+                  {e.outcome.reason}
+                </Notice>
+              ) : null,
+            )}
+          </div>
+        </Section>
+        {!stale ? <ExportBar fileBase="acadia-rapport" title="Télécharger le rapport complet" sheets={() => chainJourneySheets(reportInput)} document={(palette) => chainJourneyDocument({ ...reportInput, palette })} /> : null}
+        <DescriptiveLevel chain={chain} execution={execution} />
+        <InferentialLevel chain={chain} execution={execution} assessments={assessments ?? []} />
+        <InterpretationLevel interpretation={chainInterpretation} limits={[...new Set([...chainInterpretation.limits, ...interpretation.limits])]} />
+        {traceSection}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
       {stale ? (
