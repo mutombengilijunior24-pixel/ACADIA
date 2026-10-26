@@ -1,0 +1,84 @@
+/* MNJ Stage Connect — animations (désactivées si l'utilisateur préfère moins de mouvement). */
+
+@keyframes sc-fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes sc-slide-in {
+  from { opacity: 0; transform: translateX(28px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes sc-slide-back {
+  from { opacity: 0; transform: translateX(-28px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes sc-float {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(14px, -18px, 0) scale(1.06); }
+}
+
+@keyframes sc-shimmer {
+  from { background-position: -200% 0; }
+  to { background-position: 200% 0; }
+}
+
+@keyframes sc-pop {
+  0% { opacity: 0; transform: scale(0.6); }
+  60% { opacity: 1; transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+@keyframes sc-draw {
+  from { stroke-dashoffset: 48; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes sc-glow {
+  0%, 100% { box-shadow: 0 10px 30px -10px rgba(124, 58, 237, 0.55), 0 0 0 0 rgba(236, 72, 153, 0.35); }
+  50% { box-shadow: 0 14px 38px -10px rgba(124, 58, 237, 0.7), 0 0 0 10px rgba(236, 72, 153, 0); }
+}
+
+@keyframes sc-ring {
+  from { transform: scale(0.85); opacity: 0.7; }
+  to { transform: scale(1.6); opacity: 0; }
+}
+
+.sc-fade-up { animation: sc-fade-up 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.sc-slide-in { animation: sc-slide-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.sc-slide-back { animation: sc-slide-back 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.sc-float { animation: sc-float 9s ease-in-out infinite; }
+.sc-float-slow { animation: sc-float 13s ease-in-out infinite reverse; }
+.sc-pop { animation: sc-pop 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.sc-draw { stroke-dasharray: 48; animation: sc-draw 0.7s 0.35s ease-out both; }
+.sc-glow { animation: sc-glow 2.4s ease-in-out infinite; }
+.sc-ring::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 2px solid rgba(124, 58, 237, 0.5);
+  animation: sc-ring 1.8s ease-out infinite;
+}
+/* Reflet en surimpression : ne remplace jamais le dégradé du bouton. */
+.sc-shimmer { position: relative; overflow: hidden; isolation: isolate; }
+.sc-shimmer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.35) 50%, transparent 70%);
+  background-size: 200% 100%;
+  animation: sc-shimmer 3.2s linear infinite;
+}
+.sc-lift { transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.25s ease, border-color 0.25s ease; }
+.sc-lift:hover { transform: translateY(-4px); box-shadow: 0 22px 45px -20px rgba(76, 29, 149, 0.45); }
+
+@media (prefers-reduced-motion: reduce) {
+  .sc-fade-up, .sc-slide-in, .sc-slide-back, .sc-float, .sc-float-slow, .sc-pop, .sc-draw, .sc-glow, .sc-shimmer::before, .sc-ring::after { animation: none !important; }
+  .sc-draw { stroke-dashoffset: 0; }
+  .sc-lift, .sc-lift:hover { transition: none; transform: none; }
+}

@@ -9,7 +9,8 @@
 
 import { z } from "zod";
 
-import { journeySnapshotSchema, PERSISTENCE_LIMITS } from "@/lib/core/journey/persistence";
+import { JOURNEY_KINDS, payloadSchemaFor } from "@/lib/core/journey/kinds";
+import { PERSISTENCE_LIMITS } from "@/lib/core/journey/persistence";
 import { logAudit } from "@/lib/server/audit/AuditLog";
 import { createSession, journeyErrorResponse, listSessions } from "@/lib/server/journey/JourneySessionService";
 import { rateLimitKey, rateLimiter } from "@/lib/server/security/RateLimiter";
@@ -19,9 +20,10 @@ export const runtime = "nodejs";
 
 const createSchema = z.object({
   id: z.uuid(),
+  kind: z.enum(JOURNEY_KINDS).default("survey"),
   title: z.string().trim().min(1).max(PERSISTENCE_LIMITS.titleLength),
   stage: z.string().max(40),
-  payload: journeySnapshotSchema,
+  payload: z.unknown(),
 });
 
 export async function GET(request: Request) {
@@ -42,8 +44,11 @@ export async function POST(request: Request) {
   if (!rateLimiter.check(rateLimitKey("journey-create", user.id), 30, 60 * 60 * 1000).allowed) return Response.json({ error: "Trop de créations : réessayez plus tard." }, { status: 429 });
   const parsed = createSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Corps de requête invalide." }, { status: 400 });
+  // L'instantané est validé selon son moteur (parcours général ou gestion financière).
+  const payload = payloadSchemaFor(parsed.data.kind).safeParse(parsed.data.payload);
+  if (!payload.success) return Response.json({ error: "Corps de requête invalide." }, { status: 400 });
   try {
-    const created = await createSession(user.id, { id: parsed.data.id, title: parsed.data.title, stage: parsed.data.stage, payload: JSON.stringify(parsed.data.payload) });
+    const created = await createSession(user.id, { id: parsed.data.id, kind: parsed.data.kind, title: parsed.data.title, stage: parsed.data.stage, payload: JSON.stringify(payload.data) });
     await logAudit({ actorId: user.id, action: "JOURNEY_SESSION_CREATED", entityType: "JourneySession", entityId: created.id });
     return Response.json({ session: created }, { status: 201 });
   } catch (error) {

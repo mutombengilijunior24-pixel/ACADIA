@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
 
 import { buttonClass, inputClass, Notice, Pill, Section } from "@/components/data/ui";
@@ -42,17 +43,24 @@ export function FramingStep({
   stale,
   onChange,
   onConfirm,
+  title = "2. Mon sujet : la cohérence de ma recherche",
+  continueLabel = "Continuer : mes données",
+  variablesNote,
 }: {
   chain: ResearchChain;
   confirmed: boolean;
   stale: boolean;
   onChange: (rowId: string, patch: { questionId?: string | null; objectiveId?: string | null; hypothesisId?: string | null }) => void;
   onConfirm: () => void;
+  title?: string;
+  continueLabel?: string;
+  /** Remplace le bloc « Variables et indicateurs proposés » (moteur dédié). */
+  variablesNote?: ReactNode;
 }) {
   const variableName = (key: string) => chain.variables.find((v) => v.key === key)?.name ?? key;
   return (
     <Section
-      title="2. Mon sujet : la cohérence de ma recherche"
+      title={title}
       description="Du problème à la vérification : chaque question de recherche appelle un objectif, puis une réponse provisoire (hypothèse), elle-même vérifiée par des variables. ACADIA a relié vos énoncés ; vérifiez, corrigez si besoin, puis validez."
       action={confirmed ? <Pill tone="green">Validée par vous</Pill> : stale ? <Pill tone="yellow">À revoir</Pill> : <Pill tone="neutral">Proposée</Pill>}
     >
@@ -111,7 +119,7 @@ export function FramingStep({
             Ajoutez vos questions spécifiques, vos objectifs et vos hypothèses à l&apos;étape précédente : ACADIA les reliera.
           </Notice>
         )}
-        {chain.variables.length ? (
+        {variablesNote !== undefined ? variablesNote : chain.variables.length ? (
           <div className="rounded-xl border border-slate-200 p-3 text-sm">
             <p className="font-semibold text-slate-900">Variables et indicateurs proposés</p>
             <ul className="mt-2 space-y-1.5">
@@ -134,7 +142,7 @@ export function FramingStep({
           </Notice>
         ) : null}
         <button type="button" className={buttonClass.primary} onClick={onConfirm}>
-          {confirmed ? "Continuer : mes données" : "Valider cette chaîne et continuer"}
+          {confirmed ? continueLabel : "Valider cette chaîne et continuer"}
         </button>
       </div>
     </Section>

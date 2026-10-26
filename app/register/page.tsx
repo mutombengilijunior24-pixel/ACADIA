@@ -65,12 +65,14 @@ function RegisterForm() {
   const next = searchParams.get("next");
   const safeNext = next && next.startsWith("/dashboard") ? next : null;
   const isSurveyIntent = safeNext?.startsWith("/dashboard/survey") ?? false;
+  // Arrivée depuis la page publique « Stages » : directement le compte étudiant, puis le dossier de stage.
+  const isStageIntent = safeNext?.startsWith("/dashboard/stages") ?? false;
 
   // Arrivée depuis Survey (/survey -> "Créer une enquête") : parcours
   // d'inscription institutionnel direct, jamais l'écran de choix
   // Étudiant/Chercheur — décidé de façon synchrone depuis l'URL, avant
   // le premier rendu, pour qu'aucun flash de l'écran de choix n'apparaisse.
-  const [step, setStep] = useState<Step>(isSurveyIntent ? "institutional" : "choice");
+  const [step, setStep] = useState<Step>(isSurveyIntent ? "institutional" : isStageIntent ? "student" : "choice");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -329,8 +331,8 @@ function RegisterForm() {
 
   return (
     <AuthShell
-      title={isStudent ? "Compte étudiant / chercheur" : "Compte directeur / professeur"}
-      subtitle="Academic Intelligence pour Sciences Économiques et de Gestion."
+      title={isStageIntent && isStudent ? "Votre compte MNJ Stage Connect" : isStudent ? "Compte étudiant / chercheur" : "Compte directeur / professeur"}
+      subtitle={isStageIntent && isStudent ? "Créez votre compte : votre dossier de stage s'ouvre juste après." : "Academic Intelligence pour Sciences Économiques et de Gestion."}
       footer={
         <>
           Déjà un compte ?{" "}

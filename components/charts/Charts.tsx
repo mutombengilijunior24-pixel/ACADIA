@@ -8,6 +8,8 @@ import {
   ErrorBar,
   LabelList,
   Legend,
+  Line,
+  LineChart,
   Pie,
   PieChart,
   ReferenceLine,
@@ -197,6 +199,30 @@ export function ScatterPlot({ title, points, xLabel, yLabel, line = true }: { ti
           />
         ) : null}
       </ScatterChart>
+    </Figure>
+  );
+}
+
+/** Évolution de quelques séries sur plusieurs exercices (courbes ; un trou si la valeur manque). */
+export function TrendChart({ title, categories, series, format = (v: number) => fr(v, 0), note }: { title: string; categories: string[]; series: Array<{ name: string; values: Array<number | null> }>; format?: (v: number) => string; note?: string }) {
+  const palette = useChartPalette();
+  const rows = categories.map((label, i) => Object.fromEntries([["label", label], ...series.map((s) => [s.name, s.values[i]])]));
+  const values = series.flatMap((s) => s.values.filter((v): v is number => v !== null));
+  if (categories.length < 2 || !values.length) return null;
+  const crossesZero = Math.min(...values) < 0 && Math.max(...values) > 0;
+  return (
+    <Figure title={title} height={260} note={note}>
+      <LineChart data={rows} margin={{ top: 8, right: 24, bottom: 4, left: 8 }}>
+        <CartesianGrid stroke="#eef2f7" />
+        <XAxis dataKey="label" tick={TICK} axisLine={false} tickLine={false} />
+        <YAxis tick={TICK} axisLine={false} tickLine={false} width={88} tickFormatter={(v: number) => format(v)} />
+        {crossesZero || Math.min(...values) < 0 ? <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 4" /> : null}
+        <Tooltip {...TOOLTIP} formatter={(value: unknown) => format(Number(value))} />
+        <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+        {series.map((s, i) => (
+          <Line key={s.name} type="monotone" dataKey={s.name} stroke={palette[i % palette.length]} strokeWidth={2.5} dot={{ r: 4 }} isAnimationActive={false} connectNulls={false} />
+        ))}
+      </LineChart>
     </Figure>
   );
 }

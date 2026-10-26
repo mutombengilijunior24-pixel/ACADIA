@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 
 import ProfilePanel from "@/components/data/ProfilePanel";
 import { useResearch } from "@/contexts/ResearchContext";
@@ -17,7 +17,7 @@ import type { InstrumentState } from "./JourneyWorkspace";
 /* 1. Recherche                                                        */
 /* ================================================================= */
 
-interface ResearchForm {
+export interface ResearchForm {
   title: string;
   problem: string;
   mainQuestion: string;
@@ -88,7 +88,30 @@ function toForm(input: ResearchUnderstandingInput | null): ResearchForm {
   return { title: input.title, problem: input.problem, mainQuestion: input.mainQuestion, specificQuestions: input.specificQuestions.join("\n"), generalObjective: input.generalObjective, specificObjectives: input.specificObjectives.join("\n"), hypotheses: input.hypotheses.join("\n"), population: input.population, field: input.field, period: input.period };
 }
 
-export function ResearchStep({ report, analyzed, onAnalyze, onContinue }: { report: UnderstandingReport | null; analyzed: ResearchUnderstandingInput | null; onAnalyze: (input: ResearchUnderstandingInput) => void; onContinue: () => void }) {
+export function ResearchStep({
+  report,
+  analyzed,
+  onAnalyze,
+  onContinue,
+  title = "2. Mon sujet de recherche",
+  example = EXAMPLE,
+  continueLabel = "Continuer : mes données",
+  assistant,
+  insights,
+}: {
+  report: UnderstandingReport | null;
+  analyzed: ResearchUnderstandingInput | null;
+  onAnalyze: (input: ResearchUnderstandingInput) => void;
+  onContinue: () => void;
+  title?: string;
+  /** Exemple de saisie proposé par « Remplir avec l'exemple ». */
+  example?: Partial<ResearchForm>;
+  continueLabel?: string;
+  /** Propositions à ajouter au formulaire (moteur dédié) : rendu sous le formulaire. */
+  assistant?: (api: { form: ResearchForm; append: (field: "specificQuestions" | "specificObjectives" | "hypotheses", text: string) => void }) => ReactNode;
+  /** Lecture complémentaire du sujet (moteur dédié), affichée après l'analyse. */
+  insights?: ReactNode;
+}) {
   const [form, setForm] = useState<ResearchForm>(() => toForm(analyzed));
   const [errors, setErrors] = useState<InputError[]>([]);
   const hasDraft = useUnderstandingDraft();
@@ -147,7 +170,7 @@ export function ResearchStep({ report, analyzed, onAnalyze, onContinue }: { repo
   return (
     <div className="space-y-5">
       <Section
-        title="2. Mon sujet de recherche"
+        title={title}
         description="Seul le sujet est obligatoire ; plus vous en dites, plus le plan d'analyse sera précis. ACADIA analyse ces textes avec son moteur de compréhension."
         action={
           <div className="flex flex-wrap gap-2">
@@ -174,7 +197,7 @@ export function ResearchStep({ report, analyzed, onAnalyze, onContinue }: { repo
                 Reprendre « Comprendre ma recherche »
               </button>
             ) : null}
-            <button type="button" className={buttonClass.ghost} onClick={() => setForm(EXAMPLE)}>
+            <button type="button" className={buttonClass.ghost} onClick={() => setForm({ ...EMPTY, ...example })}>
               Remplir avec l&apos;exemple
             </button>
           </div>
@@ -209,6 +232,8 @@ export function ResearchStep({ report, analyzed, onAnalyze, onContinue }: { repo
             </fieldset>
           ))}
         </div>
+        {assistant ? <div className="mt-4">{assistant({ form, append: (field, text) => setForm((f) => ({ ...f, [field]: f[field].trim() ? `${f[field].trim()}
+${text}` : text })) })}</div> : null}
         <div className="mt-4 flex flex-wrap gap-2">
           <button type="button" className={buttonClass.primary} onClick={() => analyze()}>
             {analyzed ? "Mettre à jour l'analyse" : "Analyser ma recherche"}
@@ -217,6 +242,7 @@ export function ResearchStep({ report, analyzed, onAnalyze, onContinue }: { repo
         </div>
       </Section>
 
+      {report && insights ? insights : null}
       {report ? (
         <Section title="Ce qu'ACADIA a compris" description="Interprétation du moteur de compréhension : des propositions, pas des faits établis.">
           <div className="space-y-3 text-sm">
@@ -256,7 +282,7 @@ export function ResearchStep({ report, analyzed, onAnalyze, onContinue }: { repo
           </div>
           <div className="mt-4">
             <button type="button" className={buttonClass.primary} onClick={() => (!stale || analyze()) && onContinue()}>
-              {stale ? "Analyser les modifications et continuer" : "Continuer : mes données"}
+              {stale ? "Analyser les modifications et continuer" : continueLabel}
             </button>
           </div>
         </Section>

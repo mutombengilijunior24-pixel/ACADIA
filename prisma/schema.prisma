@@ -54,6 +54,7 @@ model User {
   resetTokens       PasswordResetToken[]
   researchProjects  ResearchProject[]    @relation("ResearchOwner")
   journeySessions   JourneySession[]     @relation("JourneySessionOwner")
+  stageApplications StageApplication[]   @relation("StageApplicant")
   cohortMemberships CohortMembership[]   @relation("CohortMembershipStudent")
 
   canevasList             SupervisionCanevas[]    @relation("CanevasSupervisor")
@@ -1368,4 +1369,106 @@ model JourneySession {
   owner User @relation("JourneySessionOwner", fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([ownerId, updatedAt])
+}
+
+// ============================================================
+// MNJ STAGE CONNECT — candidatures de stage (académique ou professionnel).
+// Données personnelles de l'étudiant (consentement recueilli à l'envoi) ;
+// visibles par l'étudiant lui-même et par les administrateurs uniquement.
+// Le paiement du pack passe par le moteur de paiement (table Payment,
+// projectId = "stage:<id>") ; paymentStatus en est le reflet métier.
+// ============================================================
+model StageApplication {
+  id               String    @id @default(cuid())
+  userId           String
+  type             String // academique | professionnel
+  status           String    @default("en_attente") // voir lib/core/stages/catalog.ts
+  lastName         String
+  postName         String
+  firstName        String
+  phone            String
+  email            String
+  university       String
+  institutionId    String? // lib/core/stages/institutions.ts ; null = établissement saisi librement
+  faculty          String // faculté générale (classement CRM)
+  facultyName      String? // faculté ou filière telle que publiée par l'établissement
+  department       String
+  level            String
+  studentNumber    String? // matricule, pour la vérification par la faculté
+  graduationYear   Int?
+  skills           String // JSON : compétences à acquérir
+  objectives       String
+  preferredCompany String?
+  preferredCity    String?
+  startMonth       String?
+  consentAt        DateTime
+  packAcceptedAt   DateTime?
+  paymentStatus    String    @default("non_paye") // non_paye | en_attente | paye | paye_bureau | echoue
+  paymentId        String?
+  paymentMethod    String?
+  paidAt           DateTime?
+  adminNotes       String?
+  assignedCompany  String?
+  // Suivi : chaque étape découle de ces faits (lib/core/stages/workflow.ts), jamais d'un statut saisi à la main.
+  documentsReceived String    @default("[]") // JSON : libellés des documents reçus par MNJ
+  companyAddress    String?
+  tutorName         String? // maître de stage
+  tutorRole         String?
+  tutorPhone        String?
+  tutorEmail        String?
+  startDate         String? // AAAA-MM-JJ
+  endDate           String? // AAAA-MM-JJ (inclus)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user       User              @relation("StageApplicant", fields: [userId], references: [id], onDelete: Cascade)
+  attendance StageAttendance[]
+  accesses   StageAccess[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([faculty])
+  @@index([createdAt])
+  @@index([university])
+}
+
+/// Présence d'un stagiaire pour une journée : arrivée et départ horodatés par le serveur, compte rendu
+/// des activités au départ, confirmation éventuelle du maître de stage. Une ligne par jour.
+model StageAttendance {
+  id               String    @id @default(cuid())
+  applicationId    String
+  day              String // AAAA-MM-JJ (fuseau STAGE_TIMEZONE)
+  arrivalAt        DateTime
+  departureAt      DateTime?
+  activities       String?
+  tutorConfirmedAt DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  application StageApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, day])
+  @@index([applicationId])
+}
+
+/// Lien d'accès en lecture (faculté) ou de confirmation des présences (maître de stage). Seule l'empreinte
+/// SHA-256 du jeton est conservée ; le lien n'est montré qu'une fois, à sa création.
+model StageAccess {
+  id            String    @id @default(cuid())
+  kind          String // tuteur | faculte
+  tokenHash     String    @unique
+  label         String
+  applicationId String? // tuteur : le dossier concerné
+  university    String? // faculte : établissement (nom tel qu'enregistré dans les dossiers)
+  facultyName   String? // faculte : faculté ou filière
+  createdById   String
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  lastUsedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  application StageApplication? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([kind])
+  @@index([applicationId])
 }

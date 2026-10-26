@@ -78,6 +78,8 @@ export const sessionSummarySchema = z.object({
   verdicts: z.array(z.object({ label: z.string().max(80), verdict: z.string().max(80) })).max(20),
   /** Nom du fichier de données importé (même s'il n'a pas été conservé dans le compte). */
   dataFile: z.string().max(260).nullable().optional(),
+  /** Précision affichée sous le titre (ex. entreprise et exercices analysés). */
+  detail: z.string().max(200).nullable().optional(),
 });
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;
 

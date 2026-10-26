@@ -257,6 +257,49 @@ export function scatterSvg(points: Array<{ x: number; y: number }>, xLabel: stri
   return { title: "", svg: svg(width, height, parts.join("")), width, height, note: line && sxx ? "Droite des moindres carrés tracée à titre illustratif." : undefined };
 }
 
+/** Courbes d'évolution (exercices en abscisse), avec légende ; un trou si une valeur manque. */
+export function lineSvg(categories: string[], series: Array<{ name: string; values: Array<number | null>; color: string }>): ChartSvg | null {
+  const values = series.flatMap((s) => s.values.filter((v): v is number => v !== null && Number.isFinite(v)));
+  if (categories.length < 2 || !values.length) return null;
+  const width = 640;
+  const legendRows = Math.ceil(series.length / 3);
+  const height = 280 + legendRows * 18;
+  const left = 92;
+  const top = 16;
+  const plotW = width - left - 24;
+  const plotH = 210;
+  const lo = Math.min(0, ...values);
+  const hi = Math.max(0, ...values);
+  const ticks = niceTicks(lo, hi, 5);
+  const t0 = ticks[0];
+  const t1 = ticks[ticks.length - 1];
+  const X = (i: number) => left + (categories.length === 1 ? plotW / 2 : (i / (categories.length - 1)) * plotW);
+  const Y = (v: number) => top + plotH - ((v - t0) / (t1 - t0 || 1)) * plotH;
+  const parts: string[] = [];
+  for (const t of ticks) parts.push(`<line x1="${left}" y1="${r1(Y(t))}" x2="${left + plotW}" y2="${r1(Y(t))}" stroke="${t === 0 ? "#94a3b8" : GRID}"${t === 0 ? ' stroke-dasharray="4 4"' : ""}/>`, text(left - 8, Y(t) + 4, fr(t, 2), { size: 11, anchor: "end", color: MUTED }));
+  categories.forEach((c, i) => parts.push(text(X(i), top + plotH + 18, short(c, 14), { size: 12, anchor: "middle" })));
+  series.forEach((s) => {
+    let path = "";
+    s.values.forEach((v, i) => {
+      if (v === null || !Number.isFinite(v)) {
+        path += " ";
+        return;
+      }
+      path += `${path.endsWith(" ") || !path ? "M" : "L"}${r1(X(i))},${r1(Y(v))}`;
+    });
+    parts.push(`<path d="${path.trim().replace(/s+/g, " ")}" fill="none" stroke="${s.color}" stroke-width="2.5"/>`);
+    s.values.forEach((v, i) => {
+      if (v !== null && Number.isFinite(v)) parts.push(`<circle cx="${r1(X(i))}" cy="${r1(Y(v))}" r="4" fill="${s.color}"/>`);
+    });
+  });
+  series.forEach((s, j) => {
+    const x = left + (j % 3) * 190;
+    const y = top + plotH + 40 + Math.floor(j / 3) * 18;
+    parts.push(`<rect x="${x}" y="${y - 9}" width="12" height="12" rx="6" fill="${s.color}"/>`, text(x + 18, y + 1, short(s.name, 26), { size: 12 }));
+  });
+  return { title: "", svg: svg(width, height, parts.join("")), width, height };
+}
+
 /* ---------------------------------------------------------------- */
 
 /** Rendu SVG d'une spécification de graphique (mêmes formes qu'à l'écran). */
@@ -281,6 +324,9 @@ export function svgFromSpec(spec: ChartSpec): ChartSvg | null {
       break;
     case "scatter":
       chart = scatterSvg(spec.points, spec.xLabel, spec.yLabel, spec.trendline, spec.color, spec.lineColor);
+      break;
+    case "line":
+      chart = lineSvg(spec.categories, spec.series);
       break;
   }
   return chart ? { ...chart, title: spec.title, note: spec.note ?? chart.note } : null;

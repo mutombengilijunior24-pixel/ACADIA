@@ -38,6 +38,8 @@ export interface Specialty {
   perspective: string;
   /** Mots du sujet qui évoquent cette spécialité (déduction, jamais imposée). */
   keywords: string[];
+  /** Moteur dédié ouvert pour cette spécialité (par défaut : le parcours général). */
+  engine?: "finance";
 }
 
 export const DOMAINS: Domain[] = [
@@ -50,7 +52,7 @@ export const SPECIALTIES: Specialty[] = [
   { id: "hr", domain: "management", label: "Ressources humaines", status: "available", perspective: "Lecture en gestion des ressources humaines : climat social, satisfaction, motivation et pratiques RH, sans attribuer de cause aux pratiques sans dispositif adapté.", keywords: ["personnel", "salarie", "employe", "agent", "satisfaction", "motivation", "rh", "ressources humaines", "remuneration", "formation", "recrutement", "absenteisme", "climat social"] },
   { id: "marketing", domain: "management", label: "Marketing et gestion commerciale", status: "available", perspective: "Lecture marketing : profils de clients, comportements d'achat, campagnes et conversions ; une association n'est pas l'effet d'une campagne.", keywords: ["client", "consommateur", "marketing", "campagne", "publicite", "fidelite", "vente", "marque", "conversion", "prix", "commercial"] },
   { id: "entrepreneurship", domain: "management", label: "Entrepreneuriat et PME", status: "available", perspective: "Lecture entrepreneuriale : création, croissance et contraintes des entreprises et des entrepreneurs.", keywords: ["entrepreneur", "entrepreneuriat", "pme", "creation", "startup", "petite entreprise", "commerce", "activite"] },
-  { id: "finance", domain: "management", label: "Gestion financière", status: "available", perspective: "Lecture financière : structure, rentabilité, liquidité et solvabilité ; les postes comptables ne sont pas des observations indépendantes.", keywords: ["bilan", "compte de resultat", "rentabilite", "liquidite", "solvabilite", "financier", "tresorerie", "etats financiers", "ratio", "comptable"] },
+  { id: "finance", domain: "management", label: "Gestion financière", status: "available", perspective: "Lecture financière : structure, rentabilité, liquidité et solvabilité ; les postes comptables ne sont pas des observations indépendantes.", keywords: ["bilan", "compte de resultat", "rentabilite", "liquidite", "solvabilite", "financier", "tresorerie", "etats financiers", "ratio", "comptable"], engine: "finance" },
   { id: "management_other", domain: "management", label: "Autre spécialité en gestion", status: "available", perspective: "Lecture en sciences de gestion.", keywords: ["gestion", "organisation", "management"] },
   { id: "monetary_banking", domain: "economics", label: "Économie monétaire et bancaire", status: "available", perspective: "Lecture monétaire et bancaire : inflation, taux de change, taux d'intérêt, crédit bancaire ; les séries temporelles exigent des méthodes propres.", keywords: ["inflation", "taux de change", "taux d'interet", "monnaie", "monetaire", "banque", "bancaire", "masse monetaire", "taux directeur", "devise"] },
   { id: "development", domain: "economics", label: "Économie du développement", status: "available", perspective: "Lecture en économie du développement : accès aux services (crédit, santé, éducation), pauvreté, inclusion ; attention à la sélection des répondants et à la causalité.", keywords: ["developpement", "pauvrete", "acces au credit", "credit", "microfinance", "inclusion", "menage", "revenu", "tontine", "informel"] },

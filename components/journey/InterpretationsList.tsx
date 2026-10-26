@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { FileSpreadsheet, Loader2, Plus } from "lucide-react";
+import { FileSpreadsheet, Landmark, Loader2, Plus } from "lucide-react";
 
 import { buttonClass, inputClass, Notice, Pill, Section } from "@/components/data/ui";
 
 interface Item {
   id: string;
   title: string;
+  kind: string;
   status: string;
   stage: string;
   summary: string | null;
@@ -23,6 +24,7 @@ interface Summary {
   progress: number;
   verdicts: Array<{ label: string; verdict: string }>;
   dataFile?: string | null;
+  detail?: string | null;
 }
 
 const parseSummary = (raw: string | null): Summary | null => {
@@ -99,9 +101,14 @@ export default function InterpretationsList() {
         title="Mes interprétations"
         description="Vos interprétations de données sont enregistrées dans votre compte : reprenez-les là où vous les aviez laissées, avec les mêmes données, la même chaîne de cohérence et les mêmes décisions."
         action={
-          <Link href="/dashboard/journey" className={buttonClass.primary}>
-            <Plus size={16} aria-hidden /> Nouvelle interprétation
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/dashboard/journey" className={buttonClass.primary}>
+              <Plus size={16} aria-hidden /> Nouvelle interprétation
+            </Link>
+            <Link href="/dashboard/journey?moteur=finance" className={buttonClass.secondary}>
+              <Landmark size={16} aria-hidden /> Nouvelle analyse financière
+            </Link>
+          </div>
         }
       >
         <div className="mb-4 flex gap-2" role="tablist" aria-label="Filtrer les interprétations">
@@ -146,10 +153,17 @@ export default function InterpretationsList() {
                     <h3 className="break-words font-bold text-slate-900">{item.title}</h3>
                   )}
                   <p className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                    {item.kind === "finance" ? <Pill tone="green">Gestion financière</Pill> : null}
                     <Pill tone="blue">{summary ? `${summary.progress}/6 étapes · ${summary.stageLabel}` : item.stage}</Pill>
-                    <span className="inline-flex items-center gap-1">
-                      <FileSpreadsheet size={14} aria-hidden /> {fileName ?? "aucun fichier"} {fileName ? (item.fileStored ? "(conservé)" : "(à réimporter)") : ""}
-                    </span>
+                    {item.kind === "finance" ? (
+                      <span className="inline-flex items-center gap-1">
+                        <Landmark size={14} aria-hidden /> {summary?.detail ?? "états non renseignés"} · chiffres enregistrés (aucun document conservé)
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1">
+                        <FileSpreadsheet size={14} aria-hidden /> {fileName ?? "aucun fichier"} {fileName ? (item.fileStored ? "(conservé)" : "(à réimporter)") : ""}
+                      </span>
+                    )}
                     <span>Modifiée le {new Date(item.updatedAt).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}</span>
                   </p>
                   {summary?.verdicts.length ? (

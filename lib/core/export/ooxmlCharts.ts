@@ -135,6 +135,15 @@ function plot(spec: ChartSpec, ref: ChartDataRef): { plotArea: string; legend: s
         legend: "",
       };
     }
+    case "line": {
+      const series = spec.series
+        .map((s, j) => `<c:ser><c:idx val="${j}"/><c:order val="${j}"/>${name(j + 1, s.name)}<c:spPr><a:ln w="28575" cap="rnd">${fill(s.color)}<a:round/></a:ln></c:spPr><c:marker><c:symbol val="circle"/><c:size val="6"/><c:spPr>${fill(s.color)}<a:ln w="9525">${fill(s.color)}</a:ln></c:spPr></c:marker><c:cat>${categories}</c:cat><c:val>${numRef(range(ref, j + 1, n), s.values.map((v) => (v === null ? Number.NaN : v)), "#,##0.##")}</c:val><c:smooth val="0"/></c:ser>`)
+        .join("");
+      return {
+        plotArea: `<c:plotArea><c:layout/><c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>${series}<c:marker val="1"/><c:axId val="101"/><c:axId val="102"/></c:lineChart>${catAx(101, 102, "b")}${valAx(102, 101, "l", { title: spec.valueName, format: "#,##0" })}<c:spPr><a:noFill/></c:spPr></c:plotArea>`,
+        legend: legend("b"),
+      };
+    }
   }
 }
 

@@ -17,7 +17,7 @@ import { PERSISTENCE_LIMITS } from "@/lib/core/journey/persistence";
 import { logAudit } from "@/lib/server/audit/AuditLog";
 import { documentStorageProvider } from "@/lib/server/documents/DocumentStorageProvider";
 import { isZipArchive } from "@/lib/server/files/detectFileType";
-import { clearSessionFile, getSession, journeyErrorResponse, ownerOf, setSessionFile } from "@/lib/server/journey/JourneySessionService";
+import { clearSessionFile, getSession, journeyErrorResponse, ownerAndKindOf, setSessionFile } from "@/lib/server/journey/JourneySessionService";
 import { rateLimitKey, rateLimiter } from "@/lib/server/security/RateLimiter";
 import { forbidden, getSessionUser, notFound, unauthorized } from "@/lib/supervision/apiAuth";
 
@@ -28,9 +28,11 @@ type RouteContext = { params: Promise<{ id: string }> };
 const isGzip = (buf: Buffer) => buf.length > 2 && buf[0] === 0x1f && buf[1] === 0x8b;
 
 async function ownership(id: string, userId: string): Promise<Response | null> {
-  const owner = await ownerOf(id);
-  if (!owner) return notFound("Interprétation introuvable.");
-  if (owner !== userId) return forbidden("Cette interprétation ne vous appartient pas.", { actorId: userId, entityType: "JourneySession", entityId: id });
+  const record = await ownerAndKindOf(id);
+  if (!record) return notFound("Interprétation introuvable.");
+  if (record.ownerId !== userId) return forbidden("Cette interprétation ne vous appartient pas.", { actorId: userId, entityType: "JourneySession", entityId: id });
+  // Moteur financier : seuls les chiffres validés sont enregistrés, jamais le document d'origine.
+  if (record.kind !== "survey") return Response.json({ error: "Aucun document n'est conservé pour une interprétation financière." }, { status: 400 });
   return null;
 }
 

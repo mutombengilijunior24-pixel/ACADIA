@@ -15,7 +15,9 @@ export type ChartSpec =
   | { kind: "histogram"; title: string; categories: string[]; values: number[]; colors: [string, string]; valueName: string; note?: string }
   | { kind: "stacked"; title: string; categories: string[]; categoryName: string; series: Array<{ name: string; values: number[]; counts: number[]; color: string }>; note?: string }
   | { kind: "means"; title: string; categories: string[]; means: number[]; sds: number[]; ns: number[]; colors: string[]; valueName: string; note?: string }
-  | { kind: "scatter"; title: string; xLabel: string; yLabel: string; points: Array<{ x: number; y: number }>; color: string; lineColor: string; trendline: boolean; note?: string };
+  | { kind: "scatter"; title: string; xLabel: string; yLabel: string; points: Array<{ x: number; y: number }>; color: string; lineColor: string; trendline: boolean; note?: string }
+  /** Évolution de quelques séries sur des périodes (exercices) ; une valeur absente laisse un trou. */
+  | { kind: "line"; title: string; categories: string[]; categoryName: string; series: Array<{ name: string; values: Array<number | null>; color: string }>; valueName: string; note?: string };
 
 /** Tableau de données d'un graphique : celui qu'on retrouve (et modifie) dans Word et Excel. */
 export function chartTable(spec: ChartSpec): { head: string[]; rows: Array<Array<string | number>> } {
@@ -30,6 +32,8 @@ export function chartTable(spec: ChartSpec): { head: string[]; rows: Array<Array
       return { head: ["Groupe", spec.valueName, "Écart-type", "n"], rows: spec.categories.map((c, i) => [c, spec.means[i], Number.isFinite(spec.sds[i]) ? spec.sds[i] : 0, spec.ns[i]]) };
     case "scatter":
       return { head: [spec.xLabel, spec.yLabel], rows: spec.points.slice(0, 3000).map((p) => [p.x, p.y]) };
+    case "line":
+      return { head: [spec.categoryName, ...spec.series.map((s) => s.name)], rows: spec.categories.map((c, i) => [c, ...spec.series.map((s) => s.values[i] ?? "")]) };
   }
 }
 

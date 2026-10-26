@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { gzipSync } from "fflate";
 
-import type { JourneySnapshot, SessionSummary } from "@/lib/core/journey/persistence";
+import type { JourneyKind } from "@/lib/core/journey/kinds";
+import type { SessionSummary } from "@/lib/core/journey/persistence";
 import { hashKey } from "@/lib/core/understanding/text";
 
 /** État de la sauvegarde, affiché en permanence dans l'en-tête du parcours. */
@@ -21,7 +22,10 @@ export const SAVE_LABELS: Record<SaveStatus, string> = {
 export interface PersistenceInput {
   sessionId: string | null;
   revision: number;
-  snapshot: JourneySnapshot;
+  /** Moteur de l'interprétation (fixé à la création). */
+  kind?: JourneyKind;
+  /** Instantané propre au moteur (validé par le serveur selon le moteur). */
+  snapshot: unknown;
   title: string;
   stage: string;
   summary: SessionSummary | null;
@@ -49,7 +53,7 @@ export function useJourneyPersistence(input: PersistenceInput) {
         if (creating.current) return;
         creating.current = true;
         const id = crypto.randomUUID();
-        const res = await fetch("/api/journey/sessions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, ...body }) });
+        const res = await fetch("/api/journey/sessions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, kind: input.kind ?? "survey", ...body }) });
         creating.current = false;
         if (res.status === 201) {
           sessionId.current = id;
@@ -87,7 +91,7 @@ export function useJourneyPersistence(input: PersistenceInput) {
       else if (res.status === 409 && data.code === "conflict") setStatus("conflict");
       else setStatus("error");
     }
-  }, [input.title, input.stage, input.snapshot, input.summary, fingerprint]);
+  }, [input.title, input.stage, input.snapshot, input.summary, input.kind, fingerprint]);
 
   useEffect(() => {
     if (!input.enabled || input.paused || status === "unavailable" || status === "conflict") return;
@@ -98,6 +102,19 @@ export function useJourneyPersistence(input: PersistenceInput) {
     }, 1500);
     return () => window.clearTimeout(timer);
   }, [fingerprint, savedFingerprint, input.enabled, input.paused, status, save]);
+
+  // Une modification attend son enregistrement (délai de 1,5 s) : le libellé ne dit pas « Enregistrée » trop tôt,
+  // et le navigateur prévient si l'on quitte la page avant la fin de l'enregistrement.
+  const pending = input.enabled && !input.paused && fingerprint !== savedFingerprint && (status === "saved" || status === "local" || status === "saving");
+  useEffect(() => {
+    if (!pending) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [pending]);
 
   /** Copie privée du fichier de données (avec consentement), pour reprendre sans réimporter. */
   const uploadFile = useCallback(async (bytes: Uint8Array, name: string, format: "csv" | "xlsx", sha256: string): Promise<{ ok: boolean; message?: string }> => {
@@ -118,5 +135,5 @@ export function useJourneyPersistence(input: PersistenceInput) {
     }
   }, []);
 
-  return { status, message, sessionId: currentId, uploadFile, sessionIdRef: sessionId };
+  return { status: pending ? ("saving" as const) : status, message, sessionId: currentId, uploadFile, sessionIdRef: sessionId };
 }

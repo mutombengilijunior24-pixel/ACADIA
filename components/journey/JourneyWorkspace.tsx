@@ -60,7 +60,8 @@ import {
 import type { GeneratedQuestionnaire } from "@/lib/core/questionnaire/QuestionnaireTypes";
 import { buildUnderstandingReport, emptyDecisions, validateResearchInput, type ResearchUnderstandingInput } from "@/lib/core/understanding";
 import { excludedRows } from "@/lib/core/data/preparation";
-import { applyRouting, buildTrace, classify, datasetView, orchestrate, type ClassificationOverrides, type DomainId, type SpecialtyId } from "@/lib/core/orchestrator";
+import { applyRouting, buildTrace, classify, datasetView, orchestrate, specialtyOf, type ClassificationOverrides, type DomainId, type SpecialtyId } from "@/lib/core/orchestrator";
+import type { EngineHandoff } from "@/lib/core/journey/kinds";
 import { hashKey } from "@/lib/core/understanding/text";
 import { assessChain, buildChain, buildChainPlan, emptyChainDecisions, interpretChain, type ChainDecisions } from "@/lib/core/chain";
 
@@ -93,8 +94,10 @@ function savedResearch(raw: unknown): ResearchUnderstandingInput | null {
   return v.ok ? v.input : null;
 }
 
-export default function JourneyWorkspace({ sessionId = null, initial = null }: { sessionId?: string | null; initial?: SavedSession | null } = {}) {
+export default function JourneyWorkspace({ sessionId = null, initial = null, onSwitchEngine }: { sessionId?: string | null; initial?: SavedSession | null; onSwitchEngine?: (handoff: EngineHandoff) => void } = {}) {
   const snap = initial?.snapshot ?? null;
+  // Spécialité à moteur dédié (Gestion financière) choisie alors qu'une interprétation existe déjà : confirmation.
+  const [switchPrompt, setSwitchPrompt] = useState(false);
   // 0. Domaine et spécialité : perspective scientifique, modifiable sans perdre les données.
   const [field, setField] = useState<{ domain: DomainId | null; specialty: SpecialtyId | null; secondary: SpecialtyId[] }>(() => (snap ? (snap.field as { domain: DomainId | null; specialty: SpecialtyId | null; secondary: SpecialtyId[] }) : { domain: null, specialty: null, secondary: [] }));
   const [fieldConfirmed, setFieldConfirmed] = useState(() => snap?.fieldConfirmed ?? false);
@@ -575,11 +578,42 @@ export default function JourneyWorkspace({ sessionId = null, initial = null }: {
             specialty={field.specialty}
             secondary={field.secondary}
             confirmed={fieldConfirmed}
-            onChange={setField}
+            onChange={(next) => {
+              setField(next);
+              setSwitchPrompt(false);
+            }}
             onConfirm={() => {
+              // Moteur dédié : il s'ouvre dans une NOUVELLE interprétation ; celle-ci reste enregistrée telle quelle.
+              if (onSwitchEngine && field.specialty && specialtyOf(field.specialty)?.engine === "finance") {
+                if (!persistence.sessionId) onSwitchEngine({ field, research: research as unknown as Record<string, unknown> | null });
+                else setSwitchPrompt(true);
+                return;
+              }
               setFieldConfirmed(true);
               setView("research");
             }}
+            notice={
+              switchPrompt && onSwitchEngine ? (
+                <Notice
+                  tone="info"
+                  title="Ouvrir le moteur « Gestion financière »"
+                  action={
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" className={buttonClass.primary} onClick={() => onSwitchEngine({ field, research: research as unknown as Record<string, unknown> | null })}>
+                        Ouvrir le moteur Gestion financière
+                      </button>
+                      <button type="button" className={buttonClass.ghost} onClick={() => setSwitchPrompt(false)}>
+                        Rester dans le parcours actuel
+                      </button>
+                    </div>
+                  }
+                >
+                  Votre interprétation actuelle reste enregistrée telle quelle ; une nouvelle interprétation « Gestion financière » sera créée avec votre domaine et votre sujet.
+                </Notice>
+              ) : field.specialty && specialtyOf(field.specialty)?.engine === "finance" && onSwitchEngine ? (
+                <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-900">Gestion financière : ACADIA ouvre son moteur dédié aux états financiers (bilan, compte de résultat, flux de trésorerie).</p>
+              ) : null
+            }
           />
         ) : null}
         {active === "research" ? (

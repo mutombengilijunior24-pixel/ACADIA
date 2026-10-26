@@ -9,10 +9,11 @@
 
 import { z } from "zod";
 
-import { journeySnapshotSchema, PERSISTENCE_LIMITS, sessionSummarySchema } from "@/lib/core/journey/persistence";
+import { isJourneyKind, payloadSchemaFor } from "@/lib/core/journey/kinds";
+import { PERSISTENCE_LIMITS, sessionSummarySchema } from "@/lib/core/journey/persistence";
 import { logAudit } from "@/lib/server/audit/AuditLog";
 import { documentStorageProvider } from "@/lib/server/documents/DocumentStorageProvider";
-import { deleteSession, getSession, journeyErrorResponse, ownerOf, saveSession, updateSessionMeta } from "@/lib/server/journey/JourneySessionService";
+import { deleteSession, getSession, journeyErrorResponse, ownerAndKindOf, ownerOf, saveSession, updateSessionMeta } from "@/lib/server/journey/JourneySessionService";
 import { rateLimitKey, rateLimiter } from "@/lib/server/security/RateLimiter";
 import { forbidden, getSessionUser, notFound, unauthorized } from "@/lib/supervision/apiAuth";
 
@@ -24,7 +25,7 @@ const saveSchema = z.object({
   revision: z.number().int().nonnegative(),
   title: z.string().trim().min(1).max(PERSISTENCE_LIMITS.titleLength),
   stage: z.string().max(40),
-  payload: journeySnapshotSchema,
+  payload: z.unknown(),
   summary: sessionSummarySchema.nullable(),
 });
 
@@ -55,6 +56,7 @@ export async function GET(_request: Request, context: RouteContext) {
       {
         session: {
           id: record.id,
+          kind: record.kind,
           title: record.title,
           status: record.status,
           stage: record.stage,
@@ -79,9 +81,14 @@ export async function PUT(request: Request, context: RouteContext) {
   const parsed = saveSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Corps de requête invalide." }, { status: 400 });
   try {
-    const denied = await ownership(id, user.id);
-    if (denied) return denied;
-    const saved = await saveSession(user.id, id, { revision: parsed.data.revision, title: parsed.data.title, stage: parsed.data.stage, payload: JSON.stringify(parsed.data.payload), summary: parsed.data.summary ? JSON.stringify(parsed.data.summary) : null });
+    const record = await ownerAndKindOf(id);
+    if (!record) return notFound("Interprétation introuvable.");
+    if (record.ownerId !== user.id) return forbidden("Cette interprétation ne vous appartient pas.", { actorId: user.id, entityType: "JourneySession", entityId: id });
+    // Validé selon le moteur ENREGISTRÉ : une sauvegarde ne peut pas changer le moteur d'une interprétation.
+    if (!isJourneyKind(record.kind)) return Response.json({ error: "Moteur d'interprétation inconnu." }, { status: 400 });
+    const payload = payloadSchemaFor(record.kind).safeParse(parsed.data.payload);
+    if (!payload.success) return Response.json({ error: "Corps de requête invalide." }, { status: 400 });
+    const saved = await saveSession(user.id, id, { revision: parsed.data.revision, title: parsed.data.title, stage: parsed.data.stage, payload: JSON.stringify(payload.data), summary: parsed.data.summary ? JSON.stringify(parsed.data.summary) : null });
     return Response.json(saved, { status: 200 });
   } catch (error) {
     return journeyErrorResponse(error);

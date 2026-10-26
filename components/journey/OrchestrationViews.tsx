@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { BarChart3, Briefcase, Layers } from "lucide-react";
 
 import { buttonClass, inputClass, Notice, Pill, Section } from "@/components/data/ui";
@@ -41,6 +41,8 @@ export function DomainStep({
   onChange,
   onConfirm,
   confirmed,
+  continueLabel = "Continuer : mon sujet de recherche",
+  notice,
 }: {
   domain: DomainId | null;
   specialty: SpecialtyId | null;
@@ -48,6 +50,10 @@ export function DomainStep({
   onChange: (next: { domain: DomainId | null; specialty: SpecialtyId | null; secondary: SpecialtyId[] }) => void;
   onConfirm: () => void;
   confirmed: boolean;
+  /** Libellé du bouton une fois le domaine confirmé. */
+  continueLabel?: string;
+  /** Message affiché au-dessus du bouton (ex. moteur dédié à la spécialité choisie). */
+  notice?: ReactNode;
 }) {
   const [attempted, setAttempted] = useState(false);
   const specialties = domain ? specialtiesFor(domain) : [];
@@ -101,6 +107,7 @@ export function DomainStep({
       ) : null}
       {specialty ? <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-700">{specialtyOf(specialty)?.perspective}</p> : null}
       <div className="mt-5 space-y-3">
+        {notice}
         {attempted && !specialty ? (
           <Notice tone="error" title="Choix incomplet">
             {domain ? "Choisissez votre spécialité." : "Choisissez votre domaine d'étude."}
@@ -117,7 +124,7 @@ export function DomainStep({
             onConfirm();
           }}
         >
-          {confirmed ? "Continuer : mon sujet de recherche" : "Confirmer et continuer"}
+          {confirmed ? continueLabel : "Confirmer et continuer"}
         </button>
       </div>
     </Section>

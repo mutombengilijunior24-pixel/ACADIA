@@ -8,11 +8,13 @@
 // ============================================================
 
 import { prisma } from "@/lib/server/db/prisma";
+import type { JourneyKind } from "@/lib/core/journey/kinds";
 import { PERSISTENCE_LIMITS } from "@/lib/core/journey/persistence";
 
 export interface SessionListItem {
   id: string;
   title: string;
+  kind: string;
   status: string;
   stage: string;
   summary: string | null;
@@ -31,19 +33,19 @@ export class JourneySessionError extends Error {
   }
 }
 
-const LIST_SELECT = { id: true, title: true, status: true, stage: true, summary: true, fileName: true, fileDocumentId: true, createdAt: true, updatedAt: true } as const;
+const LIST_SELECT = { id: true, title: true, kind: true, status: true, stage: true, summary: true, fileName: true, fileDocumentId: true, createdAt: true, updatedAt: true } as const;
 
 export async function listSessions(ownerId: string, status: "active" | "archived"): Promise<SessionListItem[]> {
   const rows = await prisma.journeySession.findMany({ where: { ownerId, status }, orderBy: { updatedAt: "desc" }, take: 50, select: LIST_SELECT });
   return rows.map(({ fileDocumentId, ...r }) => ({ ...r, fileStored: !!fileDocumentId }));
 }
 
-export async function createSession(ownerId: string, input: { id: string; title: string; stage: string; payload: string }) {
+export async function createSession(ownerId: string, input: { id: string; kind: JourneyKind; title: string; stage: string; payload: string }) {
   if (Buffer.byteLength(input.payload, "utf8") > PERSISTENCE_LIMITS.payloadBytes) throw new JourneySessionError("too_large", "Interprétation trop volumineuse pour être enregistrée.");
   const active = await prisma.journeySession.count({ where: { ownerId, status: "active" } });
   if (active >= PERSISTENCE_LIMITS.activeSessions) throw new JourneySessionError("limit_reached", `Vous avez déjà ${active} interprétations actives : archivez-en avant d'en créer une nouvelle.`);
   return prisma.journeySession.create({
-    data: { id: input.id, ownerId, title: input.title, stage: input.stage, payload: input.payload, payloadBytes: Buffer.byteLength(input.payload, "utf8") },
+    data: { id: input.id, ownerId, kind: input.kind, title: input.title, stage: input.stage, payload: input.payload, payloadBytes: Buffer.byteLength(input.payload, "utf8") },
     select: { id: true, revision: true, updatedAt: true },
   });
 }
@@ -56,8 +58,12 @@ export async function getSession(ownerId: string, id: string) {
 }
 
 export async function ownerOf(id: string): Promise<string | null> {
-  const record = await prisma.journeySession.findUnique({ where: { id }, select: { ownerId: true } });
-  return record?.ownerId ?? null;
+  return (await ownerAndKindOf(id))?.ownerId ?? null;
+}
+
+/** Propriétaire et moteur (le moteur valide l'instantané ; il ne change jamais après la création). */
+export async function ownerAndKindOf(id: string): Promise<{ ownerId: string; kind: string } | null> {
+  return prisma.journeySession.findUnique({ where: { id }, select: { ownerId: true, kind: true } });
 }
 
 /** Sauvegarde automatique : refusée (conflit) si la révision a changé depuis la dernière lecture. */

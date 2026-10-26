@@ -27,6 +27,8 @@ import {
 import * as PaymentRepository from "@/lib/server/billing/payment/PaymentRepository";
 import { settleFromWebhook } from "@/lib/server/billing/payment/PaymentService";
 import { grantEntitlementForPayment } from "@/lib/server/billing/EntitlementService";
+import { STAGE_PACK } from "@/lib/core/stages/catalog";
+import { settleStagePack } from "@/lib/server/stages/StageService";
 import { trackProductEvent, type ProductEventType } from "@/lib/server/analytics/ProductEvents";
 import { logAudit } from "@/lib/server/audit/AuditLog";
 import type { PaymentStatus } from "@/lib/server/billing/payment/PaymentStatus";
@@ -137,7 +139,8 @@ export async function POST(request: Request, context: RouteContext) {
           tx,
           payment,
           { status: parsed.status, providerRef: parsed.providerRef },
-          grantEntitlementForPayment
+          // Pack MNJ Stage Connect : le dossier de stage passe à « payé » ; sinon, octroi de l'entitlement.
+          (db, settledPayment) => (settledPayment.entitlementKey === STAGE_PACK.key ? settleStagePack(db, settledPayment) : grantEntitlementForPayment(db, settledPayment))
         );
 
         await tx.webhookEvent.update({

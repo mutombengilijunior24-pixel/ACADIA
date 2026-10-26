@@ -5,16 +5,28 @@ import Link from "next/link";
 import { Loader2 } from "lucide-react";
 
 import { buttonClass, Notice } from "@/components/data/ui";
+import FinanceWorkspace, { type SavedFinanceSession } from "@/components/finance/FinanceWorkspace";
+import { parseFinanceSnapshot } from "@/lib/core/finance/persistence";
+import type { EngineHandoff } from "@/lib/core/journey/kinds";
 import { parseSnapshot } from "@/lib/core/journey/persistence";
 
 import JourneyWorkspace, { type SavedSession } from "./JourneyWorkspace";
 
+type LoaderState =
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | { status: "ready"; kind: "survey"; saved: SavedSession | null }
+  | { status: "ready"; kind: "finance"; saved: SavedFinanceSession | null };
+
 /**
- * Ouvre le parcours : nouvelle interprétation (sans « s »), ou reprise d'une interprétation enregistrée
- * (« ?s=<id> »), chargée AVANT le montage pour initialiser toutes les décisions.
+ * Ouvre le parcours : nouvelle interprétation (parcours général, ou moteur « Gestion financière » avec
+ * « ?moteur=finance »), ou reprise d'une interprétation enregistrée (« ?s=<id> »), chargée AVANT le montage
+ * pour initialiser toutes les décisions, dans le moteur avec lequel elle a été créée.
  */
-export default function JourneyLoader({ sessionId }: { sessionId: string | null }) {
-  const [state, setState] = useState<{ status: "loading" | "ready" | "error"; saved?: SavedSession; message?: string }>(() => (sessionId ? { status: "loading" } : { status: "ready" }));
+export default function JourneyLoader({ sessionId, engine = null }: { sessionId: string | null; engine?: "finance" | null }) {
+  const [state, setState] = useState<LoaderState>(() => (sessionId ? { status: "loading" } : engine === "finance" ? { status: "ready", kind: "finance", saved: null } : { status: "ready", kind: "survey", saved: null }));
+  // Moteur dédié ouvert depuis le parcours général (nouvelle interprétation, avec le domaine et le sujet).
+  const [handoff, setHandoff] = useState<EngineHandoff | null>(null);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -22,18 +34,20 @@ export default function JourneyLoader({ sessionId }: { sessionId: string | null 
     void (async () => {
       try {
         const res = await fetch(`/api/journey/sessions/${sessionId}`, { cache: "no-store" });
-        const data = (await res.json().catch(() => ({}))) as { session?: { revision: number; title: string; payload: unknown; file: SavedSession["file"] }; error?: string };
+        const data = (await res.json().catch(() => ({}))) as { session?: { kind?: string; revision: number; title: string; payload: unknown; file: SavedSession["file"] }; error?: string };
         if (cancelled) return;
         if (!res.ok || !data.session) {
           setState({ status: "error", message: data.error ?? "Interprétation introuvable." });
           return;
         }
-        const snapshot = parseSnapshot(data.session.payload);
-        if (!snapshot) {
-          setState({ status: "error", message: "Cette interprétation a été enregistrée dans un format qui ne peut plus être relu." });
+        const unreadable = { status: "error" as const, message: "Cette interprétation a été enregistrée dans un format qui ne peut plus être relu." };
+        if (data.session.kind === "finance") {
+          const snapshot = parseFinanceSnapshot(data.session.payload);
+          setState(snapshot ? { status: "ready", kind: "finance", saved: { revision: data.session.revision, title: data.session.title, snapshot } } : unreadable);
           return;
         }
-        setState({ status: "ready", saved: { revision: data.session.revision, title: data.session.title, snapshot, file: data.session.file } });
+        const snapshot = parseSnapshot(data.session.payload);
+        setState(snapshot ? { status: "ready", kind: "survey", saved: { revision: data.session.revision, title: data.session.title, snapshot, file: data.session.file } } : unreadable);
       } catch {
         if (!cancelled) setState({ status: "error", message: "Connexion au serveur impossible." });
       }
@@ -63,5 +77,18 @@ export default function JourneyLoader({ sessionId }: { sessionId: string | null 
         {state.message}
       </Notice>
     );
-  return <JourneyWorkspace key={sessionId ?? "new"} sessionId={state.saved ? sessionId : null} initial={state.saved ?? null} />;
+  if (handoff) return <FinanceWorkspace key="handoff" sessionId={null} initial={null} handoff={handoff} />;
+  if (state.kind === "finance") return <FinanceWorkspace key={sessionId ?? "new"} sessionId={state.saved ? sessionId : null} initial={state.saved} />;
+  return (
+    <JourneyWorkspace
+      key={sessionId ?? "new"}
+      sessionId={state.saved ? sessionId : null}
+      initial={state.saved}
+      onSwitchEngine={(next) => {
+        // Nouvelle interprétation dans le moteur dédié ; l'adresse permet de rouvrir ce moteur.
+        window.history.replaceState(null, "", "/dashboard/journey?moteur=finance");
+        setHandoff(next);
+      }}
+    />
+  );
 }
