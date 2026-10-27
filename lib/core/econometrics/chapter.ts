@@ -56,7 +56,7 @@ export function buildChapter(dataset: MacroDataset, models: ModelGroup[], analys
     purpose: "Situer le lecteur : d'où viennent les données, sur quelle période, et comment ont évolué les principales variables avant toute estimation.",
     contents: ["Sources, période et fréquence des données", "Tableau des données de départ", "Statistiques descriptives (moyenne, écart-type, minimum, maximum, croissance moyenne)", "Graphiques d'évolution des variables du modèle", "Agrégats macroéconomiques clés et leur lecture"],
     paragraphs: [
-      `Les données portent sur ${dataset.economy || "l'économie étudiée"} et couvrent la période ${first}-${last}, soit ${n} observations ${FREQUENCY_LABELS[dataset.frequency].toLowerCase()}s. Source : ${dataset.source || "à préciser"}.${dataset.fictitious ? " Ces données sont FICTIVES (démonstration)." : ""}`,
+      `Économie étudiée : ${dataset.economy || "à préciser"}. Les données couvrent la période ${first}-${last}, soit ${n} observations ${FREQUENCY_LABELS[dataset.frequency].toLowerCase()}s. Source : ${dataset.source || "à préciser"}.${dataset.fictitious ? " Ces données sont FICTIVES (démonstration)." : ""}`,
       ...describeParas,
       ...computeAggregates(dataset)
         .filter((a) => keys.some((k) => k.ref.kind === "aggregate" && k.ref.id === a.def.id))

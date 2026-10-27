@@ -6,6 +6,8 @@ import { chiSquarePValue, fStatisticPValue, studentTTwoTailedPValue } from "@/li
 import { buildChain, type ResearchChain } from "@/lib/core/chain";
 import { buildDocx } from "@/lib/core/export/docx";
 import { buildWorkbook } from "@/lib/core/export/xlsx";
+import { isDedicatedEngine, JOURNEY_KINDS, payloadSchemaFor } from "@/lib/core/journey/kinds";
+import { specialtyOf } from "@/lib/core/orchestrator";
 import { buildUnderstandingReport, emptyDecisions, splitLines, validateResearchInput } from "@/lib/core/understanding";
 import {
   adf,
@@ -29,7 +31,9 @@ import {
   integrationOrder,
   macroLinks,
   measureOf,
+  proposeHypothesis,
   readiness,
+  THEORIES,
   transform,
   type MacroDataset,
 } from "@/lib/core/econometrics";
@@ -196,6 +200,32 @@ describe("lecture économique du sujet", () => {
     expect([dep.cause?.id, dep.effect?.id, dep.expectedSign, dep.signSource]).toEqual(["masse_monetaire", "inflation", 1, "theorie"]);
     expect(macroLinks(hypothesisChain("L'investissement favorise la croissance économique."))[0]).toMatchObject({ expectedSign: 1 });
   });
+
+  it("chaque hypothèse proposée d'après la théorie est bien rédigée et relue avec le bon sens et le bon signe", () => {
+    expect(proposeHypothesis("masse_monetaire", "inflation", 1)).toBe("La hausse de la masse monétaire entraîne une hausse de l'inflation.");
+    expect(proposeHypothesis("taux_directeur", "credit", -1)).toBe("La hausse du taux directeur entraîne une baisse du crédit à l'économie.");
+    expect(proposeHypothesis("taux_change", "inflation", 1)).toBe("La dépréciation du taux de change entraîne une hausse de l'inflation.");
+    for (const [key, theory] of Object.entries(THEORIES)) {
+      const [cause, effect] = key.split(">");
+      const link = macroLinks(hypothesisChain(proposeHypothesis(cause, effect, theory.sign)))[0];
+      expect([key, link.cause?.id, link.effect?.id, link.expectedSign, link.signSource]).toEqual([key, cause, effect, theory.sign, "hypothese"]);
+    }
+  });
+});
+
+describe("moteur enregistrable et proposé depuis le parcours général", () => {
+  it("le moteur « econometrie » est un moteur dédié, avec son propre schéma d'instantané", () => {
+    expect(JOURNEY_KINDS).toContain("econometrie");
+    expect(isDedicatedEngine("econometrie")).toBe(true);
+    expect(isDedicatedEngine("survey")).toBe(false);
+    expect(payloadSchemaFor("econometrie").safeParse({ engine: "finance" }).success).toBe(false);
+  });
+
+  it("proposé (jamais imposé) pour les spécialités économiques", () => {
+    expect(["monetary_banking", "development", "rural", "economics_general"].map((id) => specialtyOf(id as Parameters<typeof specialtyOf>[0])?.alternativeEngine)).toEqual(["econometrie", "econometrie", "econometrie", "econometrie"]);
+    expect(specialtyOf("monetary_banking")?.engine).toBeUndefined();
+    expect(specialtyOf("finance")?.alternativeEngine).toBeUndefined();
+  });
 });
 
 describe("démonstration complète (données fictives)", () => {
@@ -258,6 +288,7 @@ describe("démonstration complète (données fictives)", () => {
   it("instantané enregistrable", () => {
     const snap = { engine: "econometrie", version: 1, field: { domain: "economics", specialty: "monetary_banking", secondary: [] }, fieldConfirmed: true, source: "demo", dataset, datasetConfirmedKey: "k", presentationSeenKey: null, research: null, framingConfirmedKey: null, mappings, modelSettings: { [models[0].key]: { transform: "niveau", controls: [] } }, modelConfirmedKey: null, reasoningSeenKey: null, chapterKey: null, view: null };
     expect(econSnapshotSchema.safeParse(snap).success).toBe(true);
+    expect(payloadSchemaFor("econometrie").safeParse(snap).success).toBe(true);
   });
 });
 

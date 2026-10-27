@@ -81,6 +81,39 @@ export const THEORIES: Record<string, Theory> = {
 
 export const theoryOf = (cause: string | null, effect: string | null): Theory | null => (cause && effect ? (THEORIES[`${cause}>${effect}`] ?? null) : null);
 
+/** Nom de chaque concept avec son article, pour rédiger une hypothèse (« la masse monétaire », « l'inflation »). */
+const WITH_ARTICLE: Record<string, string> = {
+  inflation: "l'inflation",
+  masse_monetaire: "la masse monétaire",
+  taux_change: "le taux de change",
+  taux_directeur: "le taux directeur",
+  croissance: "la croissance économique",
+  investissement: "l'investissement",
+  depenses_publiques: "les dépenses publiques",
+  deficit: "le solde budgétaire",
+  dette: "la dette publique",
+  exportations: "les exportations",
+  ouverture: "l'ouverture commerciale",
+  ide: "les investissements directs étrangers",
+  credit: "le crédit à l'économie",
+  production_agricole: "la production agricole",
+  recettes: "les recettes publiques",
+  reserves: "les réserves de change",
+  transferts: "les transferts des migrants",
+  aide: "l'aide extérieure",
+  niveau_de_vie: "le niveau de vie",
+  epargne: "l'épargne",
+};
+const ofForm = (s: string) => (s.startsWith("le ") ? `du ${s.slice(3)}` : s.startsWith("les ") ? `des ${s.slice(4)}` : `de ${s}`);
+
+/** Hypothèse rédigée à partir d'une relation théorique : une proposition, que l'étudiant valide ou reformule. */
+export function proposeHypothesis(cause: string, effect: string, sign: 1 | -1): string {
+  const name = (id: string) => WITH_ARTICLE[id] ?? (CONCEPT_BY_ID[id]?.label.toLowerCase() ?? id);
+  // Pour le change, la hausse du cours (francs par dollar) est une dépréciation : on l'écrit sans ambiguïté.
+  const subject = cause === "taux_change" ? "La dépréciation du taux de change" : `La hausse ${ofForm(name(cause))}`;
+  return `${subject} entraîne une ${sign === 1 ? "hausse" : "baisse"} ${ofForm(name(effect))}.`;
+}
+
 interface Hit {
   concept: MacroConcept;
   at: number;

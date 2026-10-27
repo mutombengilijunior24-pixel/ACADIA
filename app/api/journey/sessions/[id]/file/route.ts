@@ -31,8 +31,8 @@ async function ownership(id: string, userId: string): Promise<Response | null> {
   const record = await ownerAndKindOf(id);
   if (!record) return notFound("Interprétation introuvable.");
   if (record.ownerId !== userId) return forbidden("Cette interprétation ne vous appartient pas.", { actorId: userId, entityType: "JourneySession", entityId: id });
-  // Moteur financier : seuls les chiffres validés sont enregistrés, jamais le document d'origine.
-  if (record.kind !== "survey") return Response.json({ error: "Aucun document n'est conservé pour une interprétation financière." }, { status: 400 });
+  // Moteurs dédiés : seules les données validées sont enregistrées, jamais le document d'origine.
+  if (record.kind !== "survey") return Response.json({ error: "Aucun document n'est conservé pour ce moteur : seules les données validées sont enregistrées." }, { status: 400 });
   return null;
 }
 

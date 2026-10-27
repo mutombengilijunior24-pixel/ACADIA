@@ -585,7 +585,7 @@ export default function JourneyWorkspace({ sessionId = null, initial = null, onS
             onConfirm={() => {
               // Moteur dédié : il s'ouvre dans une NOUVELLE interprétation ; celle-ci reste enregistrée telle quelle.
               if (onSwitchEngine && field.specialty && specialtyOf(field.specialty)?.engine === "finance") {
-                if (!persistence.sessionId) onSwitchEngine({ field, research: research as unknown as Record<string, unknown> | null });
+                if (!persistence.sessionId) onSwitchEngine({ engine: "finance", field, research: research as unknown as Record<string, unknown> | null });
                 else setSwitchPrompt(true);
                 return;
               }
@@ -599,7 +599,7 @@ export default function JourneyWorkspace({ sessionId = null, initial = null, onS
                   title="Ouvrir le moteur « Gestion financière »"
                   action={
                     <div className="flex flex-wrap gap-2">
-                      <button type="button" className={buttonClass.primary} onClick={() => onSwitchEngine({ field, research: research as unknown as Record<string, unknown> | null })}>
+                      <button type="button" className={buttonClass.primary} onClick={() => onSwitchEngine({ engine: "finance", field, research: research as unknown as Record<string, unknown> | null })}>
                         Ouvrir le moteur Gestion financière
                       </button>
                       <button type="button" className={buttonClass.ghost} onClick={() => setSwitchPrompt(false)}>
@@ -612,6 +612,20 @@ export default function JourneyWorkspace({ sessionId = null, initial = null, onS
                 </Notice>
               ) : field.specialty && specialtyOf(field.specialty)?.engine === "finance" && onSwitchEngine ? (
                 <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-900">Gestion financière : ACADIA ouvre son moteur dédié aux états financiers (bilan, compte de résultat, flux de trésorerie).</p>
+              ) : field.specialty && specialtyOf(field.specialty)?.alternativeEngine === "econometrie" && onSwitchEngine ? (
+                // Proposé, jamais imposé : une enquête auprès des ménages reste au parcours général.
+                <Notice
+                  tone="info"
+                  title="Vos données sont-elles des séries temporelles ?"
+                  action={
+                    <button type="button" className={buttonClass.secondary} onClick={() => onSwitchEngine({ engine: "econometrie", field, research: research as unknown as Record<string, unknown> | null })}>
+                      Ouvrir le moteur Économétrie et macroéconomie
+                    </button>
+                  }
+                >
+                  Inflation, PIB, masse monétaire, taux de change, production agricole… observés sur au moins 5 années (ou trimestres, ou mois) : le moteur « Économétrie et macroéconomie » mène la démarche complète (agrégats, stationnarité, estimation, cointégration). Pour une enquête par questionnaire (ménages, exploitations, entreprises), continuez ce parcours.
+                  {persistence.sessionId ? " Votre interprétation actuelle reste enregistrée telle quelle." : ""}
+                </Notice>
               ) : null
             }
           />

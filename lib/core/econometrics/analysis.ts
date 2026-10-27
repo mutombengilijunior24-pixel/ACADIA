@@ -50,7 +50,7 @@ export interface EconometricAnalysis {
   issues: string[];
 }
 
-const pct = (p: number | null) => (p === null ? "n.d." : p < 0.001 ? "< 0,001" : p.toLocaleString("fr-FR", { maximumFractionDigits: 3 }));
+const pct = (p: number | null) => (p === null ? "p n.d." : p < 0.001 ? "p < 0,001" : `p = ${p.toLocaleString("fr-FR", { maximumFractionDigits: 3 })}`);
 const diffOf = (v: Values): Values => v.map((x, i) => (i > 0 && isNum(x) && isNum(v[i - 1]) ? x - (v[i - 1] as number) : null));
 
 export function analyzeModel(dataset: MacroDataset, spec: ModelSpec): EconometricAnalysis {
@@ -110,13 +110,13 @@ export function analyzeModel(dataset: MacroDataset, spec: ModelSpec): Econometri
   }
 
   // 4. Diagnostics des résidus.
-  if (estimation.bg.pValue !== null && estimation.bg.pValue < 0.05) orientations.push({ tone: "warning", title: "Autocorrélation des erreurs", text: `Breusch-Godfrey : p = ${pct(estimation.bg.pValue)} < 0,05. Les erreurs sont autocorrélées : les écarts-types sont biaisés. Ajoutez une dynamique (variable expliquée retardée) ou corrigez les écarts-types (Newey-West) avec votre encadreur.` });
-  if (estimation.bp.pValue !== null && estimation.bp.pValue < 0.05) orientations.push({ tone: "warning", title: "Hétéroscédasticité", text: `Breusch-Pagan : p = ${pct(estimation.bp.pValue)} < 0,05. La variance des erreurs n'est pas constante : les tests t sont moins fiables (écarts-types robustes de White conseillés).` });
-  if (estimation.jb.pValue !== null && estimation.jb.pValue < 0.05) orientations.push({ tone: "info", title: "Non-normalité des résidus", text: `Jarque-Bera : p = ${pct(estimation.jb.pValue)} < 0,05. Sur un petit échantillon, les tests t et F deviennent approximatifs : signalez-le.` });
+  if (estimation.bg.pValue !== null && estimation.bg.pValue < 0.05) orientations.push({ tone: "warning", title: "Autocorrélation des erreurs", text: `Breusch-Godfrey : ${pct(estimation.bg.pValue)}, sous le seuil de 0,05. Les erreurs sont autocorrélées : les écarts-types sont biaisés. Ajoutez une dynamique (variable expliquée retardée) ou corrigez les écarts-types (Newey-West) avec votre encadreur.` });
+  if (estimation.bp.pValue !== null && estimation.bp.pValue < 0.05) orientations.push({ tone: "warning", title: "Hétéroscédasticité", text: `Breusch-Pagan : ${pct(estimation.bp.pValue)}, sous le seuil de 0,05. La variance des erreurs n'est pas constante : les tests t sont moins fiables (écarts-types robustes de White conseillés).` });
+  if (estimation.jb.pValue !== null && estimation.jb.pValue < 0.05) orientations.push({ tone: "info", title: "Non-normalité des résidus", text: `Jarque-Bera : ${pct(estimation.jb.pValue)}, sous le seuil de 0,05. Sur un petit échantillon, les tests t et F deviennent approximatifs : signalez-le.` });
   const highVif = estimation.vif.filter((v) => v.value !== null && v.value > 10);
   if (highVif.length) orientations.push({ tone: "warning", title: "Multicolinéarité", text: `VIF supérieur à 10 pour ${highVif.map((v) => v.name).join(", ")} : les effets individuels sont mal séparés ; envisagez de retirer une variable.` });
   if (estimation.r2 !== null && estimation.dw !== null && estimation.r2 > estimation.dw && levels && !allI0) orientations.push({ tone: "warning", title: "R² supérieur au Durbin-Watson", text: `R² = ${estimation.r2.toFixed(2)} > DW = ${estimation.dw.toFixed(2)} : selon la règle de Granger et Newbold, c'est le signe d'une possible régression fallacieuse.` });
-  if (estimation.fP !== null && estimation.fP >= 0.05) orientations.push({ tone: "info", title: "Modèle globalement non significatif", text: `Test de Fisher : p = ${pct(estimation.fP)} ≥ 0,05 : les variables explicatives, prises ensemble, n'expliquent pas significativement la variable expliquée.` });
+  if (estimation.fP !== null && estimation.fP >= 0.05) orientations.push({ tone: "info", title: "Modèle globalement non significatif", text: `Test de Fisher : ${pct(estimation.fP)}, au-dessus du seuil de 0,05 : les variables explicatives, prises ensemble, n'expliquent pas significativement la variable expliquée.` });
   if (!orientations.some((o) => o.tone === "warning")) orientations.push({ tone: "ok", title: "Diagnostics satisfaisants", text: "Aucun problème majeur détecté dans les résidus (autocorrélation, hétéroscédasticité, multicolinéarité) aux seuils usuels." });
 
   // 5. Causalité au sens de Granger (variables stationnaires : différences si I(1)).

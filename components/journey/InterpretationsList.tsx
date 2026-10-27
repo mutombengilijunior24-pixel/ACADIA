@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { FileSpreadsheet, Landmark, Loader2, Plus } from "lucide-react";
+import { FileSpreadsheet, Landmark, Loader2, Plus, TrendingUp } from "lucide-react";
 
 import { buttonClass, inputClass, Notice, Pill, Section } from "@/components/data/ui";
 
@@ -108,6 +108,9 @@ export default function InterpretationsList() {
             <Link href="/dashboard/journey?moteur=finance" className={buttonClass.secondary}>
               <Landmark size={16} aria-hidden /> Nouvelle analyse financière
             </Link>
+            <Link href="/dashboard/journey?moteur=econometrie" className={buttonClass.secondary}>
+              <TrendingUp size={16} aria-hidden /> Nouvelle analyse économétrique
+            </Link>
           </div>
         }
       >
@@ -153,11 +156,15 @@ export default function InterpretationsList() {
                     <h3 className="break-words font-bold text-slate-900">{item.title}</h3>
                   )}
                   <p className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                    {item.kind === "finance" ? <Pill tone="green">Gestion financière</Pill> : null}
+                    {item.kind === "finance" ? <Pill tone="green">Gestion financière</Pill> : item.kind === "econometrie" ? <Pill tone="blue">Économétrie et macroéconomie</Pill> : null}
                     <Pill tone="blue">{summary ? `${summary.progress}/6 étapes · ${summary.stageLabel}` : item.stage}</Pill>
                     {item.kind === "finance" ? (
                       <span className="inline-flex items-center gap-1">
                         <Landmark size={14} aria-hidden /> {summary?.detail ?? "états non renseignés"} · chiffres enregistrés (aucun document conservé)
+                      </span>
+                    ) : item.kind === "econometrie" ? (
+                      <span className="inline-flex items-center gap-1">
+                        <TrendingUp size={14} aria-hidden /> {summary?.detail ?? "séries non renseignées"} · séries enregistrées (aucun document conservé)
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1">
