@@ -25,7 +25,7 @@ import { createHash, randomBytes } from "node:crypto";
 
 import type { Payment, Prisma, StageAccess, StageApplication, StageAttendance } from "@prisma/client";
 
-import { FACULTY_BY_ID, isPaid, REQUIRED_DOCUMENTS, STAGE_PACK, type StageApplicationInput, type StageType } from "@/lib/core/stages/catalog";
+import { DEFAULT_STAGE_OPTIONS, FACULTY_BY_ID, isPaid, normalizeOptions, optionsTotal, REQUIRED_DOCUMENTS, STAGE_PACK, type StageApplicationInput, type StageOptionId, type StageType } from "@/lib/core/stages/catalog";
 import { attendanceError, computeStatus, dayKey, defaultEndDate, isDay, type AttendanceAction, type WorkflowFacts } from "@/lib/core/stages/workflow";
 import { logAudit } from "@/lib/server/audit/AuditLog";
 import { getPaymentProvider } from "@/lib/server/billing/payment/PaymentProviderFactory";
@@ -45,9 +45,10 @@ export class StageError extends Error {
 
 export const STAGE_SCOPE_PREFIX = "stage:";
 
-export interface StageApplicationView extends Omit<StageApplication, "skills" | "documentsReceived"> {
+export interface StageApplicationView extends Omit<StageApplication, "skills" | "documentsReceived" | "packOptions"> {
   skills: string[];
   documentsReceived: string[];
+  packOptions: string[];
 }
 
 export interface AttendanceView {
@@ -73,7 +74,7 @@ const list = (json: string): string[] => {
   }
 };
 
-const view = (a: StageApplication): StageApplicationView => ({ ...a, skills: list(a.skills), documentsReceived: list(a.documentsReceived) });
+const view = (a: StageApplication): StageApplicationView => ({ ...a, skills: list(a.skills), documentsReceived: list(a.documentsReceived), packOptions: list(a.packOptions) });
 
 const attendanceView = (r: StageAttendance): AttendanceView => ({ day: r.day, arrivalAt: r.arrivalAt, departureAt: r.departureAt, activities: r.activities, tutorConfirmedAt: r.tutorConfirmedAt });
 
@@ -195,21 +196,24 @@ export type CheckoutOutcome =
   | { state: "already_paid"; application: StageApplicationView }
   | { state: "unavailable"; application: StageApplicationView; message: string };
 
-const UNAVAILABLE = "Le paiement en ligne sera ouvert très prochainement. Votre pack est réservé : vous pouvez aussi le régler au bureau MNJ Stage Connect, l'équipe le confirmera dans votre dossier.";
+const UNAVAILABLE = "Le paiement en ligne sera ouvert très prochainement. Votre choix est enregistré : vous pouvez aussi régler au bureau MNJ Stage Connect, l'équipe le confirmera dans votre dossier.";
 
-/** Validation du pack et initiation du paiement (fournisseur Mobile Money configuré côté serveur). */
-export async function startCheckout(userId: string, id: string, input: { method: string; idempotencyKey: string }): Promise<CheckoutOutcome> {
+/** Choix des options (recommandation, assurance) et initiation du paiement ; le montant est toujours calculé ici, jamais reçu du navigateur. */
+export async function startCheckout(userId: string, id: string, input: { method: string; idempotencyKey: string; options: StageOptionId[] }): Promise<CheckoutOutcome> {
   const a = await ownedOrThrow(userId, id);
   if (a.status === "annule") throw new StageError("invalid_state", "Ce dossier est annulé.");
   if (isPaid(a.paymentStatus)) return { state: "already_paid", application: view(a) };
-  const accepted = await prisma.stageApplication.update({ where: { id }, data: { packAcceptedAt: a.packAcceptedAt ?? new Date(), paymentMethod: input.method } });
+  const options = normalizeOptions(input.options);
+  if (!options.length) throw new StageError("invalid_input", "Choisissez au moins une option.");
+  const amountUsd = optionsTotal(options);
+  const accepted = await prisma.stageApplication.update({ where: { id }, data: { packAcceptedAt: a.packAcceptedAt ?? new Date(), paymentMethod: input.method, packOptions: JSON.stringify(options) } });
 
   // Jamais de paiement simulé en production : sans fournisseur réel configuré, le paiement en ligne est indisponible.
   const provider = getPaymentProvider();
   if (provider.name === "mock" && process.env.NODE_ENV === "production") return { state: "unavailable", application: view(accepted), message: UNAVAILABLE };
 
-  const { payment, instructions } = await initiateRealCheckout({ userId, projectId: `${STAGE_SCOPE_PREFIX}${id}`, entitlementKey: STAGE_PACK.key, amountUsd: STAGE_PACK.priceUsd, currency: "USD", idempotencyKey: input.idempotencyKey });
-  await logAudit({ actorId: userId, action: "STAGE_PAYMENT_INITIATED", entityType: "StageApplication", entityId: id, metadata: { provider: payment.provider, status: payment.status, method: input.method } });
+  const { payment, instructions } = await initiateRealCheckout({ userId, projectId: `${STAGE_SCOPE_PREFIX}${id}`, entitlementKey: STAGE_PACK.key, amountUsd, currency: "USD", idempotencyKey: input.idempotencyKey });
+  await logAudit({ actorId: userId, action: "STAGE_PAYMENT_INITIATED", entityType: "StageApplication", entityId: id, metadata: { provider: payment.provider, status: payment.status, method: input.method, options: options.join("+"), amountUsd } });
   if (payment.status === "failed") {
     // Fournisseur non configuré ou injoignable : le paiement est tracé « échoué », le dossier reste à régler.
     const updated = await prisma.stageApplication.update({ where: { id }, data: { paymentId: payment.id, paymentStatus: "non_paye" } });
@@ -289,6 +293,8 @@ export interface AdminPatch {
   startDate?: string;
   endDate?: string;
   paidAtOffice?: true;
+  /** Options réglées au bureau (par défaut : celles choisies par l'étudiant, sinon la recommandation). */
+  paidOptions?: StageOptionId[];
   action?: "cancel" | "reactivate";
 }
 
@@ -320,9 +326,11 @@ export async function adminUpdate(adminId: string, id: string, patch: AdminPatch
   }
   if (patch.paidAtOffice) {
     if (isPaid(a.paymentStatus)) throw new StageError("already_paid", "Ce dossier est déjà réglé.");
+    const chosen = normalizeOptions(patch.paidOptions ?? list(a.packOptions));
     data.paymentStatus = "paye_bureau";
     data.paidAt = new Date();
     data.packAcceptedAt = a.packAcceptedAt ?? new Date();
+    data.packOptions = JSON.stringify(chosen.length ? chosen : DEFAULT_STAGE_OPTIONS);
   }
   if (patch.action === "cancel") data.status = "annule";
   // Réactivation : l'étape est recalculée à partir des faits juste après.
@@ -336,7 +344,7 @@ export async function adminUpdate(adminId: string, id: string, patch: AdminPatch
     action: patch.paidAtOffice ? "STAGE_PAYMENT_CONFIRMED" : patch.action === "cancel" ? "STAGE_APPLICATION_CANCELLED" : "STAGE_APPLICATION_UPDATED",
     entityType: "StageApplication",
     entityId: id,
-    metadata: { fields: Object.keys(data).join(","), paidAtOffice: !!patch.paidAtOffice, action: patch.action },
+    metadata: { fields: Object.keys(data).join(","), paidAtOffice: !!patch.paidAtOffice, action: patch.action, ...(patch.paidAtOffice ? { amountUsd: optionsTotal(list(String(data.packOptions))) } : {}) },
   });
   await syncStatus(updated, adminId);
   return adminGet(id);

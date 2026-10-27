@@ -34,6 +34,8 @@ export interface ApplicationJson {
   startMonth: string | null;
   paymentStatus: StagePaymentState;
   paymentMethod: string | null;
+  /** Options choisies ou réglées : recommandation (17 $), assurance (10 $). */
+  packOptions: string[];
   paidAt: string | null;
   packAcceptedAt: string | null;
   adminNotes: string | null;

@@ -20,7 +20,8 @@ import {
   FACULTIES,
   isPaid,
   LEVELS,
-  STAGE_PACK,
+  optionsTotal,
+  paidOptions,
   STAGE_STATUS_LABELS,
   STAGE_STATUSES,
   STAGE_TYPE_LABELS,
@@ -167,7 +168,7 @@ export default function StageCrm() {
       label: "En attente d'orientation",
       value: all.filter((r) => r.status === "en_attente").length,
     },
-    { icon: BadgeCheck, label: "Packs réglés", value: paidCount },
+    { icon: BadgeCheck, label: "Accompagnements réglés", value: paidCount },
     {
       icon: Briefcase,
       label: "En stage",
@@ -176,7 +177,7 @@ export default function StageCrm() {
     {
       icon: Wallet,
       label: "Montant réglé",
-      value: `${paidCount * STAGE_PACK.priceUsd} $`,
+      value: `${all.reduce((sum, r) => sum + optionsTotal(paidOptions(r)), 0)} $`,
     },
   ];
   const facultyCounts = FACULTIES.map((f) => ({

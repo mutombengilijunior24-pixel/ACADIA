@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, BadgeCheck, Briefcase, Building2, CalendarCheck2, CheckCircle2, ClipboardCheck, Clock3, FileText, GraduationCap, HeartPulse, LogIn, NotebookPen, School, ShieldCheck, Sparkles, UserCheck } from "lucide-react";
+import { ArrowRight, Briefcase, CalendarCheck2, CheckCircle2, ClipboardCheck, FileText, GraduationCap, LogIn, NotebookPen, ShieldCheck, Sparkles } from "lucide-react";
 
 import "@/components/stages/stage-connect.css";
 import Footer from "@/components/landing/footer/Footer";
 import Navbar from "@/components/landing/Navbar";
 import { StageStartLink } from "@/components/stages/StageStartLink";
-import { STAGE_PACK, STAGE_STATUS_LABELS, STAGE_TYPE_LABELS, STAGE_TYPE_PITCH, STAGE_TYPES } from "@/lib/core/stages/catalog";
+import { optionsTotal, STAGE_OPTION_IDS, STAGE_OPTIONS, STAGE_STATUS_LABELS, STAGE_TYPE_LABELS, STAGE_TYPE_PITCH, STAGE_TYPES } from "@/lib/core/stages/catalog";
 import { INSTITUTIONS } from "@/lib/core/stages/institutions";
 import { STEP_HOW } from "@/lib/core/stages/workflow";
 
@@ -15,7 +15,6 @@ export const metadata: Metadata = {
   description: "Stage académique ou professionnel : inscription, orientation vers l'entreprise, présences et journal de stage, rapport de stage et lien direct avec votre faculté.",
 };
 
-const PACK_ICONS = [HeartPulse, BadgeCheck, UserCheck, Building2, Clock3, School];
 const STEPS = ["en_attente", "dossier_complet", "oriente", "place", "en_stage", "termine"] as const;
 
 /** Page publique « Stages » : point d'entrée depuis le menu du site. */
@@ -126,27 +125,32 @@ export default function StagesLandingPage() {
         </section>
 
         <section className="mx-auto max-w-6xl px-6 py-16" aria-labelledby="sc-pack">
-          <div className="grid items-center gap-10 lg:grid-cols-[1fr_1.1fr]">
-            <div>
-              <h2 id="sc-pack" className="text-3xl font-black text-slate-900">{STAGE_PACK.title}</h2>
-              <p className="mt-2 text-slate-600">Une seule fois, tout compris : de l&apos;orientation jusqu&apos;à la transmission de vos documents à la faculté.</p>
-              <p className="mt-6 text-6xl font-black tracking-tight text-slate-900">
-                {STAGE_PACK.priceUsd} $<span className="ml-2 align-middle text-base font-semibold text-slate-500">par stage</span>
-              </p>
-            </div>
-            <ul className="grid gap-3 sm:grid-cols-2">
-              {STAGE_PACK.items.map((item, i) => {
-                const Icon = PACK_ICONS[i % PACK_ICONS.length];
-                return (
-                  <li key={item.title} className="sc-fade-up sc-lift rounded-2xl border border-slate-200 bg-white p-4" style={{ animationDelay: `${i * 60}ms` }}>
-                    <Icon size={20} className="text-violet-600" aria-hidden />
-                    <p className="mt-2 text-sm font-extrabold text-slate-900">{item.title}</p>
-                    <p className="mt-1 text-xs leading-relaxed text-slate-600">{item.detail}</p>
-                  </li>
-                );
-              })}
-            </ul>
+          <h2 id="sc-pack" className="text-3xl font-black text-slate-900">Votre accompagnement, à la carte</h2>
+          <p className="mt-2 max-w-2xl text-slate-600">Vous choisissez ce qu&apos;il vous faut : la recommandation, l&apos;assurance, ou les deux pour {optionsTotal(STAGE_OPTION_IDS)} $.</p>
+          <div className="mt-8 grid gap-5 md:grid-cols-2">
+            {STAGE_OPTIONS.map((o, i) => (
+              <div key={o.id} className={`sc-fade-up sc-lift rounded-3xl border p-6 ${o.preselected ? "border-violet-300 bg-gradient-to-br from-white to-violet-50" : "border-slate-200 bg-white"}`} style={{ animationDelay: `${i * 90}ms` }}>
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-xl font-extrabold text-slate-900">{o.title}</p>
+                  <p className="text-4xl font-black tracking-tight text-slate-900">{o.priceUsd} $</p>
+                </div>
+                <ul className="mt-4 space-y-2">
+                  {o.items.map((item) => (
+                    <li key={item.title} className="flex items-start gap-2 text-sm">
+                      <CheckCircle2 size={17} className="mt-0.5 shrink-0 text-violet-600" aria-hidden />
+                      <span>
+                        <span className="font-bold text-slate-900">{item.title}</span>
+                        <span className="block text-xs leading-relaxed text-slate-600">{item.detail}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
+          <p className="mt-6 inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-violet-500/30">
+            <Sparkles size={16} aria-hidden /> Les deux : {optionsTotal(STAGE_OPTION_IDS)} $
+          </p>
         </section>
 
         <section className="bg-white py-14" aria-labelledby="sc-etablissements">

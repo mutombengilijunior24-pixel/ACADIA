@@ -13,7 +13,7 @@ describe("suivi : chaque étape découle d'un fait", () => {
     expect(computeStatus(base, "2026-11-01")).toBe("en_attente");
     expect(computeStatus({ ...base, paymentStatus: "paye" }, "2026-11-01")).toBe("en_attente");
     expect(computeStatus({ ...base, documentsReceived: docs }, "2026-11-01")).toBe("en_attente");
-    expect(nextStep({ ...base, documentsReceived: docs.slice(1) }, "2026-11-01").student.join(" ")).toMatch(/Régler votre pack.*Remettre à MNJ : Carte d'étudiant/);
+    expect(nextStep({ ...base, documentsReceived: docs.slice(1) }, "2026-11-01").student.join(" ")).toMatch(/Choisir et régler votre accompagnement : recommandation \(17 \$\), assurance \(10 \$\) ou les deux \(27 \$\).*Remettre à MNJ : Carte d'étudiant/);
   });
 
   it("dossier complet → orienté → placé → en stage → terminé, selon les faits et la date", () => {

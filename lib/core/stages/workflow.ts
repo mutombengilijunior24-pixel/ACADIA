@@ -83,7 +83,7 @@ export function nextStep(f: WorkflowFacts, today: string): NextStep {
   const status = computeStatus(f, today);
   if (status === "en_attente") {
     const docs = missingDocuments(f.type, f.documentsReceived);
-    const student = [...(isPaid(f.paymentStatus) ? [] : ["Régler votre pack d'accompagnement."]), ...(docs.length ? [`Remettre à MNJ : ${docs.join(", ")}.`] : [])];
+    const student = [...(isPaid(f.paymentStatus) ? [] : ["Choisir et régler votre accompagnement : recommandation (17 $), assurance (10 $) ou les deux (27 $)."]), ...(docs.length ? [`Remettre à MNJ : ${docs.join(", ")}.`] : [])];
     const team = [...(isPaid(f.paymentStatus) ? [] : ["Pack non réglé."]), ...(docs.length ? [`Documents à recevoir : ${docs.join(", ")}.`] : [])];
     return { student, team };
   }

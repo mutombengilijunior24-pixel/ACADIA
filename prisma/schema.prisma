@@ -1406,6 +1406,7 @@ model StageApplication {
   paymentStatus    String    @default("non_paye") // non_paye | en_attente | paye | paye_bureau | echoue
   paymentId        String?
   paymentMethod    String?
+  packOptions      String    @default("[]") // JSON : options choisies (recommandation, assurance) — lib/core/stages/catalog.ts
   paidAt           DateTime?
   adminNotes       String?
   assignedCompany  String?

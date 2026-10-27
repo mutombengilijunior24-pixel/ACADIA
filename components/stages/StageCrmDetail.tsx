@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Ban, CheckCircle2, Circle, Copy, Link2, Loader2, RotateCcw, Save, Wallet, X } from "lucide-react";
 
-import { isPaid, PAYMENT_METHODS, PAYMENT_STATE_LABELS, REQUIRED_DOCUMENTS, STAGE_PACK, STAGE_STATUS_LABELS, STAGE_TYPE_LABELS } from "@/lib/core/stages/catalog";
+import { DEFAULT_STAGE_OPTIONS, isPaid, normalizeOptions, optionsLabel, optionsTotal, paidOptions, PAYMENT_METHODS, PAYMENT_STATE_LABELS, REQUIRED_DOCUMENTS, STAGE_OPTIONS, STAGE_STATUS_LABELS, STAGE_TYPE_LABELS, type StageOptionId } from "@/lib/core/stages/catalog";
 import { duration, facultyOf, fullName, summaryLine, timeOf } from "@/lib/core/stages/report";
 import { defaultEndDate, formatDayTitle, nextStep, summarizeAttendance } from "@/lib/core/stages/workflow";
 
@@ -54,6 +54,8 @@ export function StageCrmDetail({ id, onClose, onSaved }: { id: string; onClose: 
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [link, setLink] = useState<string | null>(null);
+  // Options réglées au bureau : par défaut celles choisies par l'étudiant (sinon la recommandation).
+  const [officeOptions, setOfficeOptions] = useState<StageOptionId[] | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   const accept = useCallback(
@@ -193,16 +195,33 @@ export function StageCrmDetail({ id, onClose, onSaved }: { id: string; onClose: 
               <p className="mt-1 whitespace-pre-line text-slate-800">{d.objectives}</p>
             </div>
 
-            <Block title="1. Pack et documents">
+            <Block title="1. Accompagnement et documents">
               <p className="text-sm text-slate-800">
                 {PAYMENT_STATE_LABELS[d.paymentStatus]}
-                {d.paymentMethod ? ` · choisi : ${PAYMENT_METHODS.find((m) => m.id === d.paymentMethod)?.label ?? d.paymentMethod}` : ""}
+                {isPaid(d.paymentStatus) ? ` — ${optionsLabel(paidOptions(d))} (${optionsTotal(paidOptions(d))} $)` : d.packOptions.length ? ` · choix de l'étudiant : ${optionsLabel(d.packOptions)} (${optionsTotal(d.packOptions)} $)` : ""}
+                {d.paymentMethod ? ` · moyen : ${PAYMENT_METHODS.find((m) => m.id === d.paymentMethod)?.label ?? d.paymentMethod}` : ""}
               </p>
-              {!isPaid(d.paymentStatus) && d.status !== "annule" ? (
-                <button type="button" disabled={busy} onClick={() => window.confirm(`Confirmer le paiement de ${STAGE_PACK.priceUsd} $ reçu au bureau pour ${fullName(d)} ?`) && void patch({ paidAtOffice: true }, "Paiement enregistré.")} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white disabled:opacity-60">
-                  <Wallet size={16} aria-hidden /> Paiement reçu au bureau
-                </button>
-              ) : null}
+              {!isPaid(d.paymentStatus) && d.status !== "annule"
+                ? (() => {
+                    const chosen = officeOptions ?? (d.packOptions.length ? normalizeOptions(d.packOptions) : DEFAULT_STAGE_OPTIONS);
+                    return (
+                      <div className="space-y-2 rounded-xl bg-emerald-50 p-3">
+                        <p className="text-xs font-semibold text-emerald-900">Réglé au bureau :</p>
+                        <div className="flex flex-wrap gap-2">
+                          {STAGE_OPTIONS.map((o) => (
+                            <label key={o.id} className="flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 text-sm text-slate-800 ring-1 ring-emerald-200">
+                              <input type="checkbox" className="h-4 w-4 accent-emerald-600" checked={chosen.includes(o.id)} onChange={() => setOfficeOptions(normalizeOptions(chosen.includes(o.id) ? chosen.filter((x) => x !== o.id) : [...chosen, o.id]))} />
+                              {o.title} — {o.priceUsd} $
+                            </label>
+                          ))}
+                        </div>
+                        <button type="button" disabled={busy || !chosen.length} onClick={() => window.confirm(`Confirmer ${optionsTotal(chosen)} $ reçus au bureau (${optionsLabel(chosen)}) pour ${fullName(d)} ?`) && void patch({ paidAtOffice: true, paidOptions: chosen }, "Paiement enregistré.")} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white disabled:opacity-60">
+                          <Wallet size={16} aria-hidden /> Paiement reçu au bureau — {optionsTotal(chosen)} $
+                        </button>
+                      </div>
+                    );
+                  })()
+                : null}
               <ul className="space-y-1.5">
                 {REQUIRED_DOCUMENTS[d.type].map((doc) => {
                   const on = d.documentsReceived.includes(doc.label);

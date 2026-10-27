@@ -2,7 +2,7 @@ import { strFromU8, unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 
 import { buildWorkbook } from "@/lib/core/export/xlsx";
-import { FACULTIES, FACULTY_BY_ID, isPaid, LEVELS, STAGE_PACK, stageApplicationSchema } from "@/lib/core/stages/catalog";
+import { DEFAULT_STAGE_OPTIONS, FACULTIES, FACULTY_BY_ID, isPaid, LEVELS, normalizeOptions, optionsTotal, paidOptions, STAGE_OPTIONS, stageApplicationSchema } from "@/lib/core/stages/catalog";
 import { stageWorkbookSheets, STAGE_EXPORT_HEADER, type StageExportRow } from "@/lib/core/stages/export";
 
 const valid = {
@@ -41,10 +41,18 @@ describe("catalogue Stage Connect", () => {
     }
   });
 
-  it("propose le pack à 30 $ et ne considère comme réglés que les paiements confirmés", () => {
-    expect(STAGE_PACK.priceUsd).toBe(30);
-    expect(STAGE_PACK.items.length).toBeGreaterThanOrEqual(6);
-    expect(STAGE_PACK.items.some((i) => /Global Sûreté/.test(`${i.title} ${i.detail}`))).toBe(true);
+  it("propose deux options (17 $ et 10 $, 27 $ les deux) et ne considère comme réglés que les paiements confirmés", () => {
+    // Recommandation 17 $ (cochée d'office), assurance 10 $, les deux 27 $.
+    expect(STAGE_OPTIONS.map((o) => [o.id, o.priceUsd])).toEqual([["recommandation", 17], ["assurance", 10]]);
+    expect(DEFAULT_STAGE_OPTIONS).toEqual(["recommandation"]);
+    expect(optionsTotal(["recommandation"])).toBe(17);
+    expect(optionsTotal(["assurance"])).toBe(10);
+    expect(optionsTotal(["assurance", "recommandation", "assurance", "inconnue"])).toBe(27);
+    expect(normalizeOptions(["assurance", "x", "recommandation"])).toEqual(["recommandation", "assurance"]);
+    expect(STAGE_OPTIONS[1].items.some((i) => /Global Sûreté/.test(i.detail))).toBe(true);
+    expect(paidOptions({ paymentStatus: "paye_bureau", packOptions: ["assurance"] })).toEqual(["assurance"]);
+    expect(paidOptions({ paymentStatus: "paye", packOptions: [] })).toEqual(["recommandation", "assurance"]);
+    expect(paidOptions({ paymentStatus: "non_paye", packOptions: ["assurance"] })).toEqual([]);
     expect(isPaid("paye")).toBe(true);
     expect(isPaid("paye_bureau")).toBe(true);
     for (const s of ["non_paye", "en_attente", "echoue"]) expect(isPaid(s)).toBe(false);

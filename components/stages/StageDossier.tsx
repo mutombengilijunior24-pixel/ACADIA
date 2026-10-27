@@ -1,17 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowRight, BadgeCheck, Building2, CheckCircle2, Circle, Clock3, CreditCard, FileText, HeartPulse, Loader2, MapPin, Phone, Rocket, School, ShieldCheck, Smartphone, Sparkles, Undo2, UserCheck } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { CheckCircle2, Circle, Clock3, FileText, Loader2, MapPin, Phone, Sparkles, Undo2 } from "lucide-react";
 
-import { isPaid, PAYMENT_METHODS, PAYMENT_STATE_LABELS, REQUIRED_DOCUMENTS, STAGE_PACK, STAGE_STATUS_LABELS, STAGE_STATUSES, STAGE_TYPE_LABELS, type StagePaymentState, type StageStatus } from "@/lib/core/stages/catalog";
+import { isPaid, PAYMENT_STATE_LABELS, REQUIRED_DOCUMENTS, STAGE_STATUS_LABELS, STAGE_STATUSES, STAGE_TYPE_LABELS, type StagePaymentState, type StageStatus } from "@/lib/core/stages/catalog";
 import { facultyOf } from "@/lib/core/stages/report";
 import { formatDay, nextStep, STEP_HOW } from "@/lib/core/stages/workflow";
 
 import { StageAttendance } from "./StageAttendance";
+import { StageOptionsCard } from "./StageOptionsCard";
 import type { DossierJson } from "./types";
 
-const PACK_ICONS = [HeartPulse, BadgeCheck, UserCheck, Building2, Clock3, School];
-const METHOD_ICONS: Record<string, typeof Smartphone> = { mpesa: Smartphone, orange_money: Smartphone, airtel_money: Smartphone, carte: CreditCard };
 const TIMELINE = STAGE_STATUSES.filter((s) => s !== "annule");
 
 export function StatusPill({ status, payment }: { status: StageStatus; payment: StagePaymentState }) {
@@ -31,11 +30,6 @@ const facts = (d: DossierJson) => ({ type: d.type, status: d.status, paymentStat
 export function StageDossier({ id, justCreated, onBack }: { id: string; justCreated: boolean; onBack: () => void }) {
   const [app, setApp] = useState<DossierJson | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [paying, setPaying] = useState(false);
-  const [method, setMethod] = useState<string>("mpesa");
-  const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<{ tone: "info" | "success" | "warning"; text: string } | null>(null);
-  const idempotency = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -65,30 +59,6 @@ export function StageDossier({ id, justCreated, onBack }: { id: string; justCrea
     }, 5000);
     return () => window.clearInterval(timer);
   }, [app?.paymentStatus, load]);
-
-  const pay = async () => {
-    if (!app) return;
-    idempotency.current ??= crypto.randomUUID();
-    setBusy(true);
-    setNotice(null);
-    try {
-      const res = await fetch(`/api/stages/${app.id}/checkout`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ method, idempotencyKey: idempotency.current }) });
-      const data = (await res.json().catch(() => ({}))) as { state?: string; message?: string; instructions?: string | null; error?: string };
-      if (!res.ok) {
-        setNotice({ tone: "warning", text: data.error ?? "Le paiement n'a pas pu être lancé." });
-        return;
-      }
-      await load();
-      if (data.state === "unavailable") setNotice({ tone: "info", text: data.message ?? "" });
-      else if (data.state === "already_paid") setNotice({ tone: "success", text: "Votre pack est déjà réglé." });
-      else setNotice({ tone: "info", text: data.instructions ?? "Paiement lancé : validez-le sur votre téléphone. Votre dossier se met à jour dès la confirmation de l'opérateur." });
-      setPaying(false);
-    } catch {
-      setNotice({ tone: "warning", text: "Connexion impossible : réessayez dans un instant." });
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const cancel = async () => {
     if (!app || !window.confirm("Annuler ce dossier ?")) return;
@@ -236,76 +206,7 @@ export function StageDossier({ id, justCreated, onBack }: { id: string; justCrea
             </ul>
           </div>
 
-          {!paid ? (
-            <div className="sc-fade-up relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-violet-950 to-indigo-900 p-5 text-white shadow-[0_30px_80px_-40px_rgba(76,29,149,0.9)] sm:p-7" style={{ animationDelay: "200ms" }} aria-label="Pack Stage Connect">
-              <div className="sc-float pointer-events-none absolute -right-16 -top-16 h-52 w-52 rounded-full bg-fuchsia-500/30 blur-3xl" aria-hidden />
-              <div className="relative flex flex-wrap items-end justify-between gap-3">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-fuchsia-200">Votre pack d&apos;accompagnement</p>
-                  <h3 className="mt-1 text-2xl font-black">{STAGE_PACK.title}</h3>
-                </div>
-                <p className="text-right">
-                  <span className="text-5xl font-black tracking-tight">{STAGE_PACK.priceUsd} $</span>
-                  <span className="block text-xs text-violet-200">tout compris</span>
-                </p>
-              </div>
-              <ul className="relative mt-5 space-y-3">
-                {STAGE_PACK.items.map((item, i) => {
-                  const Icon = PACK_ICONS[i % PACK_ICONS.length];
-                  return (
-                    <li key={item.title} className="sc-fade-up flex gap-3" style={{ animationDelay: `${300 + i * 80}ms` }}>
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/15">
-                        <Icon size={18} className="text-fuchsia-200" aria-hidden />
-                      </span>
-                      <span>
-                        <span className="block text-sm font-bold">{item.title}</span>
-                        <span className="block text-xs leading-relaxed text-violet-100/90">{item.detail}</span>
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-              {paying ? (
-                <div className="sc-slide-in relative mt-6 space-y-3 rounded-2xl bg-white p-4 text-slate-900">
-                  <p className="text-sm font-bold">Choisissez votre moyen de paiement</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {PAYMENT_METHODS.map((m) => {
-                      const Icon = METHOD_ICONS[m.id] ?? Smartphone;
-                      return (
-                        <label key={m.id} className={`flex min-h-12 cursor-pointer items-center gap-2 rounded-xl border px-3 text-sm font-semibold transition ${method === m.id ? "border-violet-500 bg-violet-50 text-violet-900 ring-2 ring-violet-200" : "border-slate-200 hover:border-violet-300"}`}>
-                          <input type="radio" name="sc-method" className="sr-only" checked={method === m.id} onChange={() => setMethod(m.id)} />
-                          <Icon size={18} aria-hidden /> {m.label}
-                        </label>
-                      );
-                    })}
-                  </div>
-                  <button type="button" onClick={() => void pay()} disabled={busy} className="sc-glow flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-500 text-sm font-black text-white disabled:opacity-70">
-                    {busy ? <Loader2 size={18} className="animate-spin" aria-hidden /> : <ShieldCheck size={18} aria-hidden />} Payer {STAGE_PACK.priceUsd} $ en toute sécurité
-                  </button>
-                  <button type="button" onClick={() => setPaying(false)} className="w-full text-center text-xs font-semibold text-slate-500 hover:text-slate-800">
-                    Plus tard
-                  </button>
-                </div>
-              ) : (
-                <button type="button" onClick={() => setPaying(true)} disabled={app.paymentStatus === "en_attente"} className="sc-glow sc-shimmer group relative mt-6 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-fuchsia-500 via-pink-500 to-amber-400 text-base font-black text-white transition disabled:opacity-70">
-                  {app.paymentStatus === "en_attente" ? (
-                    <>
-                      <Loader2 size={18} className="animate-spin" aria-hidden /> Paiement en attente de confirmation
-                    </>
-                  ) : (
-                    <>
-                      <Rocket size={20} aria-hidden /> Je valide mon pack — {STAGE_PACK.priceUsd} $ <ArrowRight size={18} aria-hidden className="transition group-hover:translate-x-1.5" />
-                    </>
-                  )}
-                </button>
-              )}
-              {notice ? <p className={`relative mt-3 rounded-xl p-3 text-sm ${notice.tone === "success" ? "bg-emerald-400/20 text-emerald-50" : notice.tone === "warning" ? "bg-amber-400/20 text-amber-50" : "bg-white/10 text-violet-50"}`} role="status">{notice.text}</p> : null}
-            </div>
-          ) : (
-            <p className="inline-flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-900">
-              <BadgeCheck size={18} aria-hidden /> {PAYMENT_STATE_LABELS[app.paymentStatus]} — votre accompagnement est activé.
-            </p>
-          )}
+          <StageOptionsCard app={app} onReload={load} />
         </section>
       ) : (
         <p className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">Ce dossier est annulé.</p>

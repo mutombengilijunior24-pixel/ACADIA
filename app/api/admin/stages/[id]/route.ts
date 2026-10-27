@@ -8,6 +8,7 @@
 
 import { z } from "zod";
 
+import { STAGE_OPTION_IDS, type StageOptionId } from "@/lib/core/stages/catalog";
 import { requireAdmin } from "@/lib/server/admin/adminAuth";
 import { adminGet, adminUpdate, stageErrorResponse } from "@/lib/server/stages/StageService";
 
@@ -30,6 +31,7 @@ const patchSchema = z.object({
   startDate: day,
   endDate: day,
   paidAtOffice: z.literal(true).optional(),
+  paidOptions: z.array(z.enum(STAGE_OPTION_IDS as [string, ...string[]])).min(1).max(STAGE_OPTION_IDS.length).optional(),
   action: z.enum(["cancel", "reactivate"]).optional(),
 });
 
@@ -52,7 +54,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message ?? "Requête invalide." }, { status: 400 });
   if (!Object.keys(parsed.data).length) return Response.json({ error: "Requête vide." }, { status: 400 });
   try {
-    return Response.json({ application: await adminUpdate(guard.user.id, id, parsed.data) }, { status: 200 });
+    return Response.json({ application: await adminUpdate(guard.user.id, id, { ...parsed.data, paidOptions: parsed.data.paidOptions as StageOptionId[] | undefined }) }, { status: 200 });
   } catch (error) {
     return stageErrorResponse(error);
   }

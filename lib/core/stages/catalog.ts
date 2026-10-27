@@ -73,20 +73,54 @@ export const PAYMENT_STATE_LABELS: Record<StagePaymentState, string> = {
 
 export const isPaid = (state: string) => state === "paye" || state === "paye_bureau";
 
-/** Pack d'accompagnement MNJ Stage Connect. [À VÉRIFIER : garanties exactes du contrat Global Sûreté] */
+/** Accompagnement MNJ Stage Connect : clé du paiement (moteur de paiement et webhook). */
 export const STAGE_PACK = {
   key: "stage_connect_pack",
-  priceUsd: 30,
-  title: "Pack Stage Connect",
-  items: [
-    { title: "Micro-assurance stage d'un mois", detail: "Avec notre partenaire Global Sûreté : maladie et accidents pendant votre stage, selon les conditions du contrat." },
-    { title: "Recommandation auprès de l'entreprise", detail: "MNJ vous présente et vous recommande à une entreprise adaptée à votre faculté et à vos objectifs." },
-    { title: "Suivi personnalisé", detail: "Un conseiller suit votre dossier, de l'orientation jusqu'à la fin du stage." },
-    { title: "Accompagnement jusqu'à l'installation", detail: "Nous vous accompagnons jusqu'à votre installation dans les bureaux de l'entreprise." },
-    { title: "Suivi pendant le mois de stage", detail: "Présences, horaires et évaluation : le suivi est organisé avec l'entreprise." },
-    { title: "Transmission à la faculté", detail: "Ce n'est pas vous qui courez : MNJ transmet à votre faculté les documents et les cotes de stage." },
-  ],
+  title: "Accompagnement Stage Connect",
 } as const;
+
+/**
+ * Options au choix (au moins une) : la recommandation est cochée d'office, l'assurance s'ajoute.
+ * Les deux : 27 $. [À VÉRIFIER : garanties exactes du contrat Global Sûreté]
+ */
+export const STAGE_OPTIONS = [
+  {
+    id: "recommandation",
+    title: "Recommandation de stage",
+    priceUsd: 17,
+    preselected: true,
+    items: [
+      { title: "Recommandation auprès de l'entreprise", detail: "MNJ vous présente et vous recommande à une entreprise adaptée à votre faculté et à vos objectifs." },
+      { title: "Suivi personnalisé", detail: "Un conseiller suit votre dossier, de l'orientation jusqu'à la fin du stage." },
+      { title: "Accompagnement jusqu'à l'installation", detail: "Nous vous accompagnons jusqu'à votre installation dans les bureaux de l'entreprise." },
+      { title: "Suivi pendant le stage", detail: "Présences, horaires et évaluation : le suivi est organisé avec l'entreprise." },
+      { title: "Transmission à la faculté", detail: "Ce n'est pas vous qui courez : MNJ transmet à votre faculté les documents et les cotes de stage." },
+    ],
+  },
+  {
+    id: "assurance",
+    title: "Assurance stage",
+    priceUsd: 10,
+    preselected: false,
+    items: [{ title: "Micro-assurance stage d'un mois", detail: "Avec notre partenaire Global Sûreté : maladie et accidents pendant votre stage, selon les conditions du contrat." }],
+  },
+] as const;
+
+export type StageOptionId = (typeof STAGE_OPTIONS)[number]["id"];
+export const STAGE_OPTION_IDS = STAGE_OPTIONS.map((o) => o.id) as StageOptionId[];
+export const DEFAULT_STAGE_OPTIONS: StageOptionId[] = STAGE_OPTIONS.filter((o) => o.preselected).map((o) => o.id);
+export const isStageOption = (v: unknown): v is StageOptionId => typeof v === "string" && (STAGE_OPTION_IDS as string[]).includes(v);
+
+/** Options valides, sans doublon, dans l'ordre du catalogue. */
+export const normalizeOptions = (ids: readonly unknown[]): StageOptionId[] => STAGE_OPTION_IDS.filter((id) => ids.includes(id));
+
+/** Montant en dollars des options choisies (17 $, 10 $, ou 27 $ pour les deux). */
+export const optionsTotal = (ids: readonly unknown[]): number => STAGE_OPTIONS.filter((o) => ids.includes(o.id)).reduce((sum, o) => sum + o.priceUsd, 0);
+
+export const optionsLabel = (ids: readonly unknown[]): string => STAGE_OPTIONS.filter((o) => ids.includes(o.id)).map((o) => o.title.toLowerCase()).join(" + ");
+
+/** Options effectivement réglées (un dossier réglé avant l'arrivée des options compte pour les deux). */
+export const paidOptions = (a: { paymentStatus: string; packOptions: readonly string[] }): StageOptionId[] => (isPaid(a.paymentStatus) ? (a.packOptions.length ? normalizeOptions(a.packOptions) : [...STAGE_OPTION_IDS]) : []);
 
 /** Documents à fournir après l'inscription ; l'équipe MNJ coche ceux qu'elle a reçus. */
 export interface StageDocument {
