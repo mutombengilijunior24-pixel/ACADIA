@@ -126,7 +126,7 @@ export default function StagesLandingPage() {
 
         <section className="mx-auto max-w-6xl px-6 py-16" aria-labelledby="sc-pack">
           <h2 id="sc-pack" className="text-3xl font-black text-slate-900">Votre accompagnement, à la carte</h2>
-          <p className="mt-2 max-w-2xl text-slate-600">Vous choisissez ce qu&apos;il vous faut : la recommandation, l&apos;assurance, ou les deux pour {optionsTotal(STAGE_OPTION_IDS)} $.</p>
+          <p className="mt-2 max-w-2xl text-slate-600">Vous choisissez ce qu&apos;il vous faut : la recommandation, l&apos;assurance, ou les deux pour {optionsTotal(STAGE_OPTION_IDS)}&nbsp;$.</p>
           <div className="mt-8 grid gap-5 md:grid-cols-2">
             {STAGE_OPTIONS.map((o, i) => (
               <div key={o.id} className={`sc-fade-up sc-lift rounded-3xl border p-6 ${o.preselected ? "border-violet-300 bg-gradient-to-br from-white to-violet-50" : "border-slate-200 bg-white"}`} style={{ animationDelay: `${i * 90}ms` }}>
@@ -149,7 +149,7 @@ export default function StagesLandingPage() {
             ))}
           </div>
           <p className="mt-6 inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-violet-500/30">
-            <Sparkles size={16} aria-hidden /> Les deux : {optionsTotal(STAGE_OPTION_IDS)} $
+            <Sparkles size={16} aria-hidden /> Les deux : {optionsTotal(STAGE_OPTION_IDS)}&nbsp;$
           </p>
         </section>
 
