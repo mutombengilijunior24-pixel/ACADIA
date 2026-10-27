@@ -60,18 +60,20 @@ export const STAGE_STATUS_LABELS: Record<StageStatus, string> = {
   annule: "Annulé",
 };
 
-export const PAYMENT_STATES = ["non_paye", "en_attente", "paye", "paye_bureau", "echoue"] as const;
+export const PAYMENT_STATES = ["non_paye", "en_attente", "a_verifier", "paye", "paye_bureau", "paye_momo", "echoue"] as const;
 export type StagePaymentState = (typeof PAYMENT_STATES)[number];
 
 export const PAYMENT_STATE_LABELS: Record<StagePaymentState, string> = {
   non_paye: "Pack non réglé",
   en_attente: "Paiement en attente de confirmation",
+  a_verifier: "Paiement déclaré, en vérification",
   paye: "Pack réglé (paiement en ligne)",
   paye_bureau: "Pack réglé (au bureau)",
+  paye_momo: "Pack réglé (Mobile Money vérifié)",
   echoue: "Paiement non abouti",
 };
 
-export const isPaid = (state: string) => state === "paye" || state === "paye_bureau";
+export const isPaid = (state: string) => state === "paye" || state === "paye_bureau" || state === "paye_momo";
 
 /** Accompagnement MNJ Stage Connect : clé du paiement (moteur de paiement et webhook). */
 export const STAGE_PACK = {

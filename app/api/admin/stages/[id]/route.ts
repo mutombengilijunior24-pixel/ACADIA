@@ -32,6 +32,7 @@ const patchSchema = z.object({
   endDate: day,
   paidAtOffice: z.literal(true).optional(),
   paidOptions: z.array(z.enum(STAGE_OPTION_IDS as [string, ...string[]])).min(1).max(STAGE_OPTION_IDS.length).optional(),
+  paymentDecision: z.enum(["confirm", "reject"]).optional(),
   action: z.enum(["cancel", "reactivate"]).optional(),
 });
 

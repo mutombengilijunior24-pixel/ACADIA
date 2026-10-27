@@ -19,7 +19,7 @@ export function StatusPill({ status, payment }: { status: StageStatus; payment: 
       <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${status === "annule" ? "bg-slate-100 text-slate-600" : status === "en_attente" ? "bg-amber-100 text-amber-900" : "bg-emerald-100 text-emerald-900"}`}>
         {status === "en_attente" ? <Clock3 size={13} aria-hidden /> : <CheckCircle2 size={13} aria-hidden />} {STAGE_STATUS_LABELS[status]}
       </span>
-      <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-bold ${isPaid(payment) ? "bg-emerald-100 text-emerald-900" : payment === "en_attente" ? "bg-sky-100 text-sky-900" : "bg-violet-100 text-violet-900"}`}>{PAYMENT_STATE_LABELS[payment]}</span>
+      <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-bold ${isPaid(payment) ? "bg-emerald-100 text-emerald-900" : payment === "en_attente" ? "bg-sky-100 text-sky-900" : payment === "a_verifier" ? "bg-amber-100 text-amber-900" : "bg-violet-100 text-violet-900"}`}>{PAYMENT_STATE_LABELS[payment]}</span>
     </span>
   );
 }

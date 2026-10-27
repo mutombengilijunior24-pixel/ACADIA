@@ -1,6 +1,7 @@
 // Forme JSON d'un dossier MNJ Stage Connect côté navigateur (dates en chaînes ISO).
 
 import type { StagePaymentState, StageStatus, StageType } from "@/lib/core/stages/catalog";
+import type { MomoAccount } from "@/lib/core/stages/momo";
 
 export interface AttendanceJson {
   day: string;
@@ -36,6 +37,11 @@ export interface ApplicationJson {
   paymentMethod: string | null;
   /** Options choisies ou réglées : recommandation (17 $), assurance (10 $). */
   packOptions: string[];
+  /** Paiement Mobile Money déclaré par l'étudiant (à vérifier par l'équipe). */
+  payAccount: string | null;
+  payTransactionId: string | null;
+  paySenderPhone: string | null;
+  payDeclaredAt: string | null;
   paidAt: string | null;
   packAcceptedAt: string | null;
   adminNotes: string | null;
@@ -51,7 +57,14 @@ export interface ApplicationJson {
   createdAt: string;
 }
 
+export interface PaymentChannelsJson {
+  reference: string;
+  online: boolean;
+  momo: MomoAccount[];
+}
+
 export interface DossierJson extends ApplicationJson {
   attendance: AttendanceJson[];
   today: string;
+  payment: PaymentChannelsJson;
 }

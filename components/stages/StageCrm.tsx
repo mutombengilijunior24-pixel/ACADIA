@@ -9,6 +9,7 @@ import {
   CalendarDays,
   Download,
   Hourglass,
+  Smartphone,
   Loader2,
   Search,
   Users,
@@ -33,6 +34,7 @@ import { stageWorkbookSheets } from "@/lib/core/stages/export";
 import { facultyOf } from "@/lib/core/stages/report";
 
 import { FacultyAccessPanel } from "./FacultyAccessPanel";
+import { MomoAccountsPanel } from "./MomoAccountsPanel";
 import { StageCrmDetail, type AdminDetailJson } from "./StageCrmDetail";
 import type { ApplicationJson } from "./types";
 
@@ -82,7 +84,7 @@ export default function StageCrm() {
   const [dept, setDept] = useState("");
   const [level, setLevel] = useState("");
   const [status, setStatus] = useState<StageStatus | "">("");
-  const [payment, setPayment] = useState<"" | "paid" | "unpaid">("");
+  const [payment, setPayment] = useState<"" | "paid" | "unpaid" | "a_verifier">("");
   const [q, setQ] = useState("");
   const [open, setOpen] = useState<string | null>(null);
   const closeDetail = useCallback(() => setOpen(null), []);
@@ -139,6 +141,7 @@ export default function StageCrm() {
       if (status && r.status !== status) return false;
       if (payment === "paid" && !isPaid(r.paymentStatus)) return false;
       if (payment === "unpaid" && isPaid(r.paymentStatus)) return false;
+      if (payment === "a_verifier" && r.paymentStatus !== "a_verifier") return false;
       return (
         !needle ||
         [
@@ -162,6 +165,11 @@ export default function StageCrm() {
       icon: CalendarDays,
       label: "Inscrits aujourd'hui",
       value: all.filter((r) => sameDay(r.createdAt, loadedAt)).length,
+    },
+    {
+      icon: Smartphone,
+      label: "Paiements à vérifier",
+      value: all.filter((r) => r.paymentStatus === "a_verifier").length,
     },
     {
       icon: Hourglass,
@@ -274,7 +282,7 @@ export default function StageCrm() {
       ) : (
         <>
           <section
-            className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6"
+            className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-7"
             aria-label="Indicateurs"
           >
             {kpis.map((k, i) => {
@@ -405,13 +413,14 @@ export default function StageCrm() {
               className={select}
               value={payment}
               onChange={(e) =>
-                setPayment(e.target.value as "" | "paid" | "unpaid")
+                setPayment(e.target.value as "" | "paid" | "unpaid" | "a_verifier")
               }
               aria-label="Paiement"
             >
               <option value="">Tous les paiements</option>
               <option value="paid">Pack réglé</option>
               <option value="unpaid">Pack non réglé</option>
+              <option value="a_verifier">Paiement à vérifier</option>
             </select>
           </section>
 
@@ -487,13 +496,15 @@ export default function StageCrm() {
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <span
-                          className={`rounded-full px-2.5 py-1 text-xs font-bold ${isPaid(r.paymentStatus) ? "bg-emerald-100 text-emerald-900" : "bg-violet-100 text-violet-900"}`}
+                          className={`rounded-full px-2.5 py-1 text-xs font-bold ${isPaid(r.paymentStatus) ? "bg-emerald-100 text-emerald-900" : r.paymentStatus === "a_verifier" ? "bg-amber-100 text-amber-900" : "bg-violet-100 text-violet-900"}`}
                         >
                           {isPaid(r.paymentStatus)
                             ? "Réglé"
-                            : r.paymentStatus === "en_attente"
-                              ? "En attente"
-                              : "Non réglé"}
+                            : r.paymentStatus === "a_verifier"
+                              ? "À vérifier"
+                              : r.paymentStatus === "en_attente"
+                                ? "En attente"
+                                : "Non réglé"}
                         </span>
                       </td>
                     </tr>
@@ -515,6 +526,7 @@ export default function StageCrm() {
           </div>
         </>
       )}
+      {rows !== null && !error ? <MomoAccountsPanel /> : null}
       {rows !== null && !error ? <FacultyAccessPanel /> : null}
     </div>
   );

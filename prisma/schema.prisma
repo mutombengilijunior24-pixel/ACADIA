@@ -1407,6 +1407,11 @@ model StageApplication {
   paymentId        String?
   paymentMethod    String?
   packOptions      String    @default("[]") // JSON : options choisies (recommandation, assurance) — lib/core/stages/catalog.ts
+  // Paiement Mobile Money déclaré par l'étudiant, vérifié par l'équipe (lib/core/stages/momo.ts)
+  payAccount       String? // numéro de MNJ crédité
+  payTransactionId String?   @unique // numéro de transaction du SMS (normalisé) : jamais réutilisable
+  paySenderPhone   String? // numéro de l'étudiant qui a payé
+  payDeclaredAt    DateTime?
   paidAt           DateTime?
   adminNotes       String?
   assignedCompany  String?
@@ -1431,6 +1436,14 @@ model StageApplication {
   @@index([faculty])
   @@index([createdAt])
   @@index([university])
+}
+
+/// Réglages de MNJ Stage Connect modifiables par l'équipe (ex. numéros Mobile Money), valeur JSON.
+model StageSetting {
+  key         String   @id
+  value       String
+  updatedById String?
+  updatedAt   DateTime @updatedAt
 }
 
 /// Présence d'un stagiaire pour une journée : arrivée et départ horodatés par le serveur, compte rendu

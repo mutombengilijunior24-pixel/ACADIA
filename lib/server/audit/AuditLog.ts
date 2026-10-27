@@ -254,7 +254,10 @@ export type AuditAction =
   | "STAGE_TUTOR_CONFIRMED"
   | "STAGE_ACCESS_CREATED"
   | "STAGE_ACCESS_REVOKED"
-  | "STAGE_ACCESS_VIEWED";
+  | "STAGE_ACCESS_VIEWED"
+  | "STAGE_PAYMENT_DECLARED"
+  | "STAGE_PAYMENT_REJECTED"
+  | "STAGE_SETTINGS_UPDATED";
 
 export async function logAudit(input: {
   actorId?: string;

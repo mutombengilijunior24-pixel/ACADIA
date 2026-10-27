@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { Ban, CheckCircle2, Circle, Copy, Link2, Loader2, RotateCcw, Save, Wallet, X } from "lucide-react";
 
 import { DEFAULT_STAGE_OPTIONS, isPaid, normalizeOptions, optionsLabel, optionsTotal, paidOptions, PAYMENT_METHODS, PAYMENT_STATE_LABELS, REQUIRED_DOCUMENTS, STAGE_OPTIONS, STAGE_STATUS_LABELS, STAGE_TYPE_LABELS, type StageOptionId } from "@/lib/core/stages/catalog";
+import { formatMsisdn, operatorLabel } from "@/lib/core/stages/momo";
 import { duration, facultyOf, fullName, summaryLine, timeOf } from "@/lib/core/stages/report";
 import { defaultEndDate, formatDayTitle, nextStep, summarizeAttendance } from "@/lib/core/stages/workflow";
 
@@ -201,7 +202,35 @@ export function StageCrmDetail({ id, onClose, onSaved }: { id: string; onClose: 
                 {isPaid(d.paymentStatus) ? ` — ${optionsLabel(paidOptions(d))} (${optionsTotal(paidOptions(d))} $)` : d.packOptions.length ? ` · choix de l'étudiant : ${optionsLabel(d.packOptions)} (${optionsTotal(d.packOptions)} $)` : ""}
                 {d.paymentMethod ? ` · moyen : ${PAYMENT_METHODS.find((m) => m.id === d.paymentMethod)?.label ?? d.paymentMethod}` : ""}
               </p>
-              {!isPaid(d.paymentStatus) && d.status !== "annule"
+              {d.paymentStatus === "a_verifier" ? (
+                <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3" aria-label="Paiement déclaré à vérifier">
+                  <p className="text-sm font-bold text-amber-950">Paiement Mobile Money déclaré : à vérifier sur le téléphone de MNJ</p>
+                  <dl className="grid gap-1 text-sm sm:grid-cols-2">
+                    {[
+                      ["Montant attendu", `${optionsTotal(d.packOptions)} $ — ${optionsLabel(d.packOptions)}`],
+                      ["Numéro crédité", `${operatorLabel(d.paymentMethod ?? "")} ${formatMsisdn(d.payAccount ?? "")}`],
+                      ["Envoyé depuis", formatMsisdn(d.paySenderPhone ?? "")],
+                      ["N° de transaction", d.payTransactionId ?? "—"],
+                      ["Référence du dossier", d.payment.reference],
+                      ["Déclaré le", d.payDeclaredAt ? new Date(d.payDeclaredAt).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }) : "—"],
+                    ].map(([k, v]) => (
+                      <div key={k}>
+                        <dt className="text-xs font-semibold text-amber-800">{k}</dt>
+                        <dd className="font-semibold text-slate-900">{v}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" disabled={busy} onClick={() => window.confirm(`Confirmer : ${optionsTotal(d.packOptions)} $ bien reçus (transaction ${d.payTransactionId}) ?`) && void patch({ paymentDecision: "confirm" }, "Paiement confirmé.")} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white disabled:opacity-60">
+                      <Wallet size={16} aria-hidden /> Confirmer : {optionsTotal(d.packOptions)}&nbsp;$ reçus
+                    </button>
+                    <button type="button" disabled={busy} onClick={() => window.confirm("Refuser : paiement introuvable sur le téléphone de MNJ ? L'étudiant sera invité à vérifier sa déclaration.") && void patch({ paymentDecision: "reject" }, "Paiement refusé : l'étudiant est invité à vérifier.")} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-rose-200 px-4 text-sm font-bold text-rose-700 disabled:opacity-60">
+                      Refuser : introuvable
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {!isPaid(d.paymentStatus) && d.status !== "annule" && d.paymentStatus !== "a_verifier"
                 ? (() => {
                     const chosen = officeOptions ?? (d.packOptions.length ? normalizeOptions(d.packOptions) : DEFAULT_STAGE_OPTIONS);
                     return (

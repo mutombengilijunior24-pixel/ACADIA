@@ -26,6 +26,7 @@ import { createHash, randomBytes } from "node:crypto";
 import type { Payment, Prisma, StageAccess, StageApplication, StageAttendance } from "@prisma/client";
 
 import { DEFAULT_STAGE_OPTIONS, FACULTY_BY_ID, isPaid, normalizeOptions, optionsTotal, REQUIRED_DOCUMENTS, STAGE_PACK, type StageApplicationInput, type StageOptionId, type StageType } from "@/lib/core/stages/catalog";
+import { momoAccountsSchema, normalizeMsisdn, paymentReference, type MomoAccount, type PaymentDeclaration } from "@/lib/core/stages/momo";
 import { attendanceError, computeStatus, dayKey, defaultEndDate, isDay, type AttendanceAction, type WorkflowFacts } from "@/lib/core/stages/workflow";
 import { logAudit } from "@/lib/server/audit/AuditLog";
 import { getPaymentProvider } from "@/lib/server/billing/payment/PaymentProviderFactory";
@@ -59,10 +60,56 @@ export interface AttendanceView {
   tutorConfirmedAt: Date | null;
 }
 
+export interface PaymentChannels {
+  /** Code à indiquer comme motif du transfert. */
+  reference: string;
+  /** Paiement en ligne automatique disponible (agrégateur configuré). */
+  online: boolean;
+  /** Numéros Mobile Money de MNJ actifs, pour le paiement déclaré puis vérifié. */
+  momo: MomoAccount[];
+}
+
 export interface StageDossier extends StageApplicationView {
   attendance: AttendanceView[];
   /** Jour de référence du serveur (AAAA-MM-JJ), pour que l'écran et le serveur raisonnent sur la même date. */
   today: string;
+  payment: PaymentChannels;
+}
+
+/* ------------------------------------ Réglages ------------------------------------ */
+
+const MOMO_KEY = "momo_accounts";
+
+/** Numéros Mobile Money de MNJ (réglage modifiable dans le CRM) ; liste vide si absent ou illisible. */
+export async function getMomoAccounts(): Promise<MomoAccount[]> {
+  const row = await prisma.stageSetting.findUnique({ where: { key: MOMO_KEY } });
+  if (!row) return [];
+  try {
+    const parsed = momoAccountsSchema.safeParse(JSON.parse(row.value));
+    return parsed.success ? parsed.data : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function setMomoAccounts(adminId: string, accounts: MomoAccount[]): Promise<MomoAccount[]> {
+  const value = JSON.stringify(accounts);
+  await prisma.stageSetting.upsert({ where: { key: MOMO_KEY }, create: { key: MOMO_KEY, value, updatedById: adminId }, update: { value, updatedById: adminId } });
+  await logAudit({ actorId: adminId, action: "STAGE_SETTINGS_UPDATED", entityType: "StageSetting", entityId: MOMO_KEY, metadata: { accounts: accounts.length, active: accounts.filter((a) => a.active).length } });
+  return accounts;
+}
+
+/** Le paiement en ligne n'est proposé que si un vrai fournisseur est configuré (jamais de simulation en production). */
+function onlinePaymentAvailable(): boolean {
+  try {
+    return !(getPaymentProvider().name === "mock" && process.env.NODE_ENV === "production");
+  } catch {
+    return false;
+  }
+}
+
+async function paymentChannels(id: string): Promise<PaymentChannels> {
+  return { reference: paymentReference(id), online: onlinePaymentAvailable(), momo: (await getMomoAccounts()).filter((a) => a.active) };
 }
 
 const list = (json: string): string[] => {
@@ -146,8 +193,35 @@ async function ownedOrThrow(userId: string, id: string): Promise<StageApplicatio
 }
 
 async function dossier(a: StageApplication): Promise<StageDossier> {
-  const attendance = await prisma.stageAttendance.findMany({ where: { applicationId: a.id }, orderBy: { day: "asc" } });
-  return { ...view(a), attendance: attendance.map(attendanceView), today: today() };
+  const [attendance, payment] = await Promise.all([prisma.stageAttendance.findMany({ where: { applicationId: a.id }, orderBy: { day: "asc" } }), paymentChannels(a.id)]);
+  return { ...view(a), attendance: attendance.map(attendanceView), today: today(), payment };
+}
+
+/**
+ * Paiement Mobile Money déclaré par l'étudiant (montant envoyé sur un numéro de MNJ, numéro de transaction du SMS).
+ * Le dossier passe « à vérifier » : seule l'équipe, après contrôle sur le téléphone de MNJ, peut le déclarer réglé.
+ * Un numéro de transaction ne peut servir qu'à un seul dossier.
+ */
+export async function declarePayment(userId: string, id: string, input: PaymentDeclaration): Promise<StageDossier> {
+  const a = await ownedOrThrow(userId, id);
+  if (a.status === "annule") throw new StageError("invalid_state", "Ce dossier est annulé.");
+  if (isPaid(a.paymentStatus)) throw new StageError("already_paid", "Votre accompagnement est déjà réglé.");
+  if (a.paymentStatus === "en_attente") throw new StageError("invalid_state", "Un paiement en ligne est déjà en cours pour ce dossier.");
+  const options = normalizeOptions(input.options);
+  if (!options.length) throw new StageError("invalid_input", "Choisissez au moins une option.");
+  const account = (await getMomoAccounts()).find((m) => m.active && normalizeMsisdn(m.number) === normalizeMsisdn(input.account));
+  if (!account) throw new StageError("invalid_input", "Ce numéro de MNJ n'est pas (ou plus) proposé : choisissez un numéro affiché.");
+  try {
+    await prisma.stageApplication.update({
+      where: { id },
+      data: { packOptions: JSON.stringify(options), packAcceptedAt: a.packAcceptedAt ?? new Date(), paymentStatus: "a_verifier", paymentMethod: account.operator, payAccount: account.number, payTransactionId: input.transactionId, paySenderPhone: input.senderPhone, payDeclaredAt: new Date() },
+    });
+  } catch (e) {
+    if ((e as { code?: string }).code === "P2002") throw new StageError("invalid_input", "Ce numéro de transaction a déjà été déclaré pour un autre dossier. Vérifiez-le dans votre SMS ou contactez MNJ.");
+    throw e;
+  }
+  await logAudit({ actorId: userId, action: "STAGE_PAYMENT_DECLARED", entityType: "StageApplication", entityId: id, metadata: { operator: account.operator, options: options.join("+"), amountUsd: optionsTotal(options) } });
+  return dossier(await syncStatus(await ownedOrThrow(userId, id), userId));
 }
 
 /** Dossier de l'étudiant : paiement rafraîchi, étape recalculée, présences. */
@@ -295,6 +369,8 @@ export interface AdminPatch {
   paidAtOffice?: true;
   /** Options réglées au bureau (par défaut : celles choisies par l'étudiant, sinon la recommandation). */
   paidOptions?: StageOptionId[];
+  /** Paiement Mobile Money déclaré : confirmé après vérification, ou refusé (introuvable). */
+  paymentDecision?: "confirm" | "reject";
   action?: "cancel" | "reactivate";
 }
 
@@ -332,6 +408,17 @@ export async function adminUpdate(adminId: string, id: string, patch: AdminPatch
     data.packAcceptedAt = a.packAcceptedAt ?? new Date();
     data.packOptions = JSON.stringify(chosen.length ? chosen : DEFAULT_STAGE_OPTIONS);
   }
+  if (patch.paymentDecision) {
+    if (a.paymentStatus !== "a_verifier") throw new StageError("invalid_state", "Aucun paiement déclaré à vérifier sur ce dossier.");
+    if (patch.paymentDecision === "confirm") {
+      data.paymentStatus = "paye_momo";
+      data.paidAt = new Date();
+    } else {
+      // Refusé : le numéro de transaction est libéré (il pourra être déclaré correctement), l'étudiant est invité à vérifier.
+      data.paymentStatus = "echoue";
+      data.payTransactionId = null;
+    }
+  }
   if (patch.action === "cancel") data.status = "annule";
   // Réactivation : l'étape est recalculée à partir des faits juste après.
   if (patch.action === "reactivate") {
@@ -341,10 +428,10 @@ export async function adminUpdate(adminId: string, id: string, patch: AdminPatch
   const updated = await prisma.stageApplication.update({ where: { id }, data });
   await logAudit({
     actorId: adminId,
-    action: patch.paidAtOffice ? "STAGE_PAYMENT_CONFIRMED" : patch.action === "cancel" ? "STAGE_APPLICATION_CANCELLED" : "STAGE_APPLICATION_UPDATED",
+    action: patch.paidAtOffice || patch.paymentDecision === "confirm" ? "STAGE_PAYMENT_CONFIRMED" : patch.paymentDecision === "reject" ? "STAGE_PAYMENT_REJECTED" : patch.action === "cancel" ? "STAGE_APPLICATION_CANCELLED" : "STAGE_APPLICATION_UPDATED",
     entityType: "StageApplication",
     entityId: id,
-    metadata: { fields: Object.keys(data).join(","), paidAtOffice: !!patch.paidAtOffice, action: patch.action, ...(patch.paidAtOffice ? { amountUsd: optionsTotal(list(String(data.packOptions))) } : {}) },
+    metadata: { fields: Object.keys(data).join(","), paidAtOffice: !!patch.paidAtOffice, paymentDecision: patch.paymentDecision, action: patch.action, ...(patch.paidAtOffice ? { amountUsd: optionsTotal(list(String(data.packOptions))) } : {}) },
   });
   await syncStatus(updated, adminId);
   return adminGet(id);

@@ -27,6 +27,8 @@ export interface StageExportRow {
   paymentStatus: StagePaymentState;
   assignedCompany: string | null;
   tutorName?: string | null;
+  payAccount?: string | null;
+  payTransactionId?: string | null;
   startDate?: string | null;
   endDate?: string | null;
   adminNotes: string | null;
@@ -36,15 +38,15 @@ export interface StageExportRow {
 export const facultyLabel = (id: string) => FACULTY_BY_ID[id]?.label ?? id;
 const facultyOfRow = (r: StageExportRow) => r.facultyName || facultyLabel(r.faculty);
 
-export const STAGE_EXPORT_HEADER = ["Date", "Heure", "Type de stage", "Nom", "Post-nom", "Prénom", "Matricule", "Téléphone", "E-mail", "Université", "Faculté", "Filière", "Niveau", "Année de fin", "Compétences visées", "Objectifs", "Entreprise souhaitée", "Ville", "Début souhaité", "Étape", "Paiement du pack", "Entreprise retenue", "Maître de stage", "Début du stage", "Fin du stage", "Notes"];
-const WIDTHS = [11, 7, 18, 16, 16, 16, 14, 16, 26, 30, 34, 28, 16, 10, 40, 60, 24, 14, 12, 24, 30, 24, 24, 12, 12, 30];
+export const STAGE_EXPORT_HEADER = ["Date", "Heure", "Type de stage", "Nom", "Post-nom", "Prénom", "Matricule", "Téléphone", "E-mail", "Université", "Faculté", "Filière", "Niveau", "Année de fin", "Compétences visées", "Objectifs", "Entreprise souhaitée", "Ville", "Début souhaité", "Étape", "Paiement", "Numéro MNJ crédité", "N° de transaction", "Entreprise retenue", "Maître de stage", "Début du stage", "Fin du stage", "Notes"];
+const WIDTHS = [11, 7, 18, 16, 16, 16, 14, 16, 26, 30, 34, 28, 16, 10, 40, 60, 24, 14, 12, 24, 30, 18, 22, 24, 24, 12, 12, 30];
 
 function table(rows: StageExportRow[]): Cell[][] {
   return [
     STAGE_EXPORT_HEADER,
     ...rows.map((r) => {
       const d = new Date(r.createdAt);
-      return [d.toLocaleDateString("fr-FR"), d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }), STAGE_TYPE_LABELS[r.type], r.lastName, r.postName, r.firstName, r.studentNumber, r.phone, r.email, r.university, facultyOfRow(r), r.department, r.level, r.graduationYear, r.skills.join(", "), r.objectives, r.preferredCompany, r.preferredCity, r.startMonth, STAGE_STATUS_LABELS[r.status], PAYMENT_STATE_LABELS[r.paymentStatus], r.assignedCompany, r.tutorName, r.startDate, r.endDate, r.adminNotes];
+      return [d.toLocaleDateString("fr-FR"), d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }), STAGE_TYPE_LABELS[r.type], r.lastName, r.postName, r.firstName, r.studentNumber, r.phone, r.email, r.university, facultyOfRow(r), r.department, r.level, r.graduationYear, r.skills.join(", "), r.objectives, r.preferredCompany, r.preferredCity, r.startMonth, STAGE_STATUS_LABELS[r.status], PAYMENT_STATE_LABELS[r.paymentStatus], r.payAccount, r.payTransactionId, r.assignedCompany, r.tutorName, r.startDate, r.endDate, r.adminNotes];
     }),
   ];
 }
