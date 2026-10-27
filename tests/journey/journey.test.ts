@@ -456,6 +456,13 @@ describe("Fichiers exportés : graphiques natifs, modifiables, dans la palette c
     expect(xml.split('uri="http://schemas.openxmlformats.org/drawingml/2006/chart"').length - 1).toBe(4);
     expect(xml).toContain('<w:pStyle w:val="Heading1"/>');
     expect(xml).toContain("11,688");
+    // Sous chaque titre : une ligne horizontale Word (objet supprimable), et non une bordure figée du style.
+    expect(xml.split('<w:pStyle w:val="Heading1"/>').length).toBe(xml.split('o:hr="t"').length);
+    expect(strFromU8(files["word/styles.xml"])).not.toContain("<w:pBdr><w:bottom");
+    // Format Word actuel : pas de « Mode de compatibilité » à l'ouverture.
+    expect(strFromU8(files["word/settings.xml"])).toContain('w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"');
+    expect(strFromU8(files["word/_rels/document.xml.rels"])).toContain('Target="settings.xml"');
+    expect(strFromU8(files["[Content_Types].xml"])).toContain('PartName="/word/settings.xml"');
     const chart = strFromU8(files["word/charts/chart1.xml"]);
     expect(chart).toContain('<c:grouping val="stacked"/>');
     expect(chart).toContain("<c:f>'Données'!$B$2:$B$3</c:f>");
