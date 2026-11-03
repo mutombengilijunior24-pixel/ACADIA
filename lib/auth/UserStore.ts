@@ -136,6 +136,15 @@ export async function updateUserPassword(userId: string, passwordHash: string): 
   await prisma.user.update({ where: { id: userId }, data: { passwordHash } });
 }
 
+/** Date de dernière connexion (administration) : une écriture manquée ne bloque jamais la connexion. */
+export async function recordLogin(userId: string): Promise<void> {
+  try {
+    await prisma.user.update({ where: { id: userId }, data: { lastLoginAt: new Date() } });
+  } catch {
+    // Information de suivi seulement.
+  }
+}
+
 // ------------------------------------------------------------
 // RÔLE — auto-déclaration, aucune vérification institutionnelle.
 // Voir ACADIA_P16_ARCHITECTURE.md §5 / ACADIA_P17 §7.

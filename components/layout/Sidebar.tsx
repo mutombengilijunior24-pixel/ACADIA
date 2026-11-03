@@ -20,6 +20,8 @@ import {
   FolderOpen,
   Briefcase,
   Contact,
+  BookCheck,
+  Users,
 } from "lucide-react";
 import Logo from "@/components/shared/Logo";
 import { useAuth } from "@/contexts/AuthContext";
@@ -36,6 +38,7 @@ const menuItems = [
   { title: "Mes recherches", href: "/dashboard/research", icon: FileSearch },
   { title: "Interpréter mes données", href: "/dashboard/journey", icon: FileSpreadsheet },
   { title: "Mes interprétations", href: "/dashboard/interpretations", icon: FolderOpen },
+  { title: "Vérifier mes références", href: "/dashboard/references", icon: BookCheck },
   { title: "Stages", href: "/dashboard/stages", icon: Briefcase },
   { title: "Survey", href: "/dashboard/survey", icon: ClipboardList },
   { title: "Paramètres", href: "/dashboard/settings", icon: Settings },
@@ -77,6 +80,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: { mobileOpen?: 
     ...(user?.role === "supervisor" ? [{ title: "Espace directeur", href: "/dashboard/supervisor", icon: GraduationCap }] : []),
     ...(user?.role === "admin"
       ? [
+          { title: "Comptes inscrits", href: "/dashboard/admin/users", icon: Users },
           { title: "Produit", href: "/dashboard/admin/product", icon: BarChart3 },
           { title: "Stage Connect (CRM)", href: "/dashboard/admin/stages", icon: Contact },
         ]

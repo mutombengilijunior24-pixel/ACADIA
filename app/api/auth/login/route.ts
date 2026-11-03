@@ -3,7 +3,7 @@
 // ============================================================
 
 import { cookies } from "next/headers";
-import { findUserByEmail } from "@/lib/auth/UserStore";
+import { findUserByEmail, recordLogin } from "@/lib/auth/UserStore";
 import { verifyPassword } from "@/lib/auth/passwords";
 import { createSessionToken, SESSION_COOKIE_MAX_AGE_SECONDS, SESSION_COOKIE_NAME } from "@/lib/auth/session";
 import { toPublicUser } from "@/lib/auth/AuthTypes";
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     maxAge: SESSION_COOKIE_MAX_AGE_SECONDS,
   });
 
-  await trackProductEvent({ userId: user.id, eventType: "AUTH_LOGIN" });
+  await Promise.all([trackProductEvent({ userId: user.id, eventType: "AUTH_LOGIN" }), recordLogin(user.id)]);
 
   return Response.json({ user: toPublicUser(user) }, { status: 200 });
 }
