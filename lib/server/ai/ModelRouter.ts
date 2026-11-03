@@ -72,6 +72,8 @@ const DEFAULT_COMPLEXITY_BY_OPERATION: Record<AIOperation, AIComplexity> = {
   // Extraction de métadonnées depuis un texte fourni — comparable à
   // DOCUMENT_ANALYSIS (mission Bibliography & Reference Intelligence).
   REFERENCE_ANALYSIS: "STANDARD",
+  // Lecture comparée d'une phrase et d'un résumé : jugement fin, jamais économique.
+  REFERENCE_CONTEXT: "STANDARD",
   OTHER: "STANDARD",
 };
 

@@ -13,7 +13,9 @@ export type Block =
   | { type: "warn"; text: string }
   | { type: "bullets"; items: string[] }
   | { type: "table"; head: string[]; rows: Array<Array<string | number>> }
-  | { type: "chart"; spec: ChartSpec };
+  | { type: "chart"; spec: ChartSpec }
+  /** Paragraphe avec italique (référence bibliographique), en retrait suspendu si `hanging`. */
+  | { type: "rich"; runs: Array<{ text: string; italic: boolean }>; hanging?: boolean };
 
 export interface ReportDocument {
   title: string;
@@ -85,6 +87,8 @@ export function renderHtml(doc: ReportDocument): string {
           const chart = svgFromSpec(b.spec);
           return chart ? `<figure><figcaption>${esc(chart.title)}</figcaption>${chart.svg}${chart.note ? `<p class="note">${esc(chart.note)}</p>` : ""}</figure>` : "";
         }
+        case "rich":
+          return `<p${b.hanging ? ' style="padding-left:2.2em;text-indent:-2.2em"' : ""}>${b.runs.map((r) => (r.italic ? `<em>${esc(r.text)}</em>` : esc(r.text))).join("")}</p>`;
       }
     })
     .join("\n");

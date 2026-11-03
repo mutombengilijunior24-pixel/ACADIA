@@ -35,6 +35,11 @@ export const AI_OPERATIONS = [
   // RÉELLEMENT fourni par le chercheur, jamais une génération à partir
   // d'un sujet vague (voir lib/ai/openai/ReferenceAnalysisAI.ts).
   "REFERENCE_ANALYSIS",
+  // Vérificateur de références — contrôle du contexte : l'IA compare la
+  // phrase de l'étudiant au résumé RÉEL renvoyé par une base
+  // bibliographique ; elle ne décide jamais de l'existence d'une
+  // référence (voir lib/ai/openai/ReferenceContextAI.ts).
+  "REFERENCE_CONTEXT",
   // Research Writing Engine (mission dédiée) — génération de prose
   // pour introduction/problématique/méthodologie/cadre théorique
   // (lib/ai/openai/ResearchWritingAI.ts). Discussion/conclusion/

@@ -93,6 +93,9 @@ export function buildDocx(doc: ReportDocument): Uint8Array {
           return b.items.map((item) => para(run(`•  ${item}`), "Bullet")).join("");
         case "table":
           return tableXml(b.head, b.rows);
+        case "rich":
+          // Référence APA : italique conservé, retrait suspendu de 1 cm.
+          return para(b.runs.map((r) => run(r.text, r.italic ? "<w:i/>" : "")).join(""), undefined, b.hanging ? '<w:ind w:left="567" w:hanging="567"/>' : "");
         case "chart": {
           chartIndex += 1;
           const k = chartIndex;
