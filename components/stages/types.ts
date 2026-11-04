@@ -9,6 +9,11 @@ export interface AttendanceJson {
   departureAt: string | null;
   activities: string | null;
   tutorConfirmedAt: string | null;
+  /** « vocal » : journée dictée puis rédigée avec ACADIA. */
+  journalSource?: string | null;
+  writtenAt?: string | null;
+  /** Paroles transcrites (vue de l'étudiant seulement). */
+  transcript?: string | null;
 }
 
 export interface ApplicationJson {
@@ -64,6 +69,8 @@ export interface PaymentChannelsJson {
 }
 
 export interface DossierJson extends ApplicationJson {
+  /** Parties rédigées du rapport (JSON), lues avec parseReportDraft. */
+  reportDraft?: string | null;
   attendance: AttendanceJson[];
   today: string;
   payment: PaymentChannelsJson;

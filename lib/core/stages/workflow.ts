@@ -41,7 +41,7 @@ export function dayKey(instant: Date, timeZone = STAGE_TIMEZONE): string {
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 export const isDay = (v: unknown): v is string => typeof v === "string" && DAY.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) && new Date(`${v}T00:00:00Z`).toISOString().startsWith(v);
 
-function shiftDay(day: string, days: number): string {
+export function shiftDay(day: string, days: number): string {
   const d = new Date(`${day}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
@@ -99,7 +99,7 @@ export function nextStep(f: WorkflowFacts, today: string): NextStep {
     return { student: ["MNJ attend l'accord de l'entreprise et la date de début."], team: [`Inscrire l'accord de l'entreprise : ${missing.join(", ")}.`] };
   }
   if (status === "place") return { student: [`Votre stage commence le ${formatDay(f.startDate!)} : vos présences s'ouvriront ce jour-là.`], team: [`Début du stage le ${formatDay(f.startDate!)}.`] };
-  if (status === "en_stage") return { student: ["Chaque jour : signez votre arrivée, puis clôturez la journée en décrivant vos activités."], team: [`Stage en cours jusqu'au ${formatDay(f.endDate!)}.`] };
+  if (status === "en_stage") return { student: ["Chaque jour : signez votre arrivée, dictez (ou écrivez) votre journée, puis clôturez-la ; vous pouvez encore la dicter le soir ou le lendemain."], team: [`Stage en cours jusqu'au ${formatDay(f.endDate!)}.`] };
   if (status === "termine") return { student: ["Votre registre est clos : générez votre rapport de stage."], team: ["Transmettre le registre de présences et les cotes à la faculté."] };
   return { student: [], team: [] };
 }
@@ -176,6 +176,7 @@ export function attendanceError(status: StageStatus, today: string, startDate: s
   if (input.action === "arrivee") return existing ? "Votre arrivée est déjà signée pour aujourd'hui." : null;
   if (!existing) return "Signez d'abord votre arrivée.";
   if (existing.departureAt) return "Votre journée est déjà clôturée.";
-  if (input.activities.trim().length < ACTIVITIES_MIN) return `Décrivez vos activités de la journée (au moins ${ACTIVITIES_MIN} caractères).`;
+  // Le compte rendu peut déjà avoir été dicté et validé dans la journée (journal vocal).
+  if ((input.activities.trim() || existing.activities?.trim() || "").length < ACTIVITIES_MIN) return `Décrivez vos activités de la journée (au moins ${ACTIVITIES_MIN} caractères).`;
   return null;
 }

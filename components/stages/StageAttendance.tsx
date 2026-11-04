@@ -1,25 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { BadgeCheck, CalendarCheck2, Clock3, Download, Loader2, LogIn, LogOut, NotebookPen } from "lucide-react";
+import { BadgeCheck, CalendarCheck2, Clock3, Loader2, LogIn, LogOut, Mic } from "lucide-react";
 
-import { buildDocx } from "@/lib/core/export/docx";
 import { ACTIVITIES_MIN, ATTENDANCE_MIN_RATE } from "@/lib/core/stages/catalog";
-import { duration, stageReportDocument, summaryLine, timeOf } from "@/lib/core/stages/report";
+import { journalWindowOpen } from "@/lib/core/stages/journal";
+import { duration, summaryLine, timeOf } from "@/lib/core/stages/report";
 import { computeStatus, formatDay, formatDayTitle, summarizeAttendance } from "@/lib/core/stages/workflow";
 
+import { ReportBuilder } from "./ReportBuilder";
 import type { DossierJson } from "./types";
-
-function download(bytes: Uint8Array, name: string, type: string) {
-  const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
+import { VoiceJournal } from "./VoiceJournal";
 
 const facts = (d: DossierJson) => ({ type: d.type, status: d.status, paymentStatus: d.paymentStatus, documentsReceived: d.documentsReceived, assignedCompany: d.assignedCompany, tutorName: d.tutorName, startDate: d.startDate, endDate: d.endDate });
 
@@ -59,10 +50,9 @@ export function StageAttendance({ dossier, onChange }: { dossier: DossierJson; o
     }
   };
 
-  const report = () => {
-    const doc = stageReportDocument(dossier, dossier.today);
-    download(buildDocx(doc), `rapport-de-stage-${dossier.lastName.toLowerCase()}-${dossier.today}.docx`, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-  };
+  // Journal vocal : la journée d'hier peut encore être dictée aujourd'hui (le soir, chez soi).
+  const yesterdayRecord = dossier.status === "annule" ? null : (dossier.attendance.find((r) => r.day !== dossier.today && journalWindowOpen(r.day, dossier.today)) ?? null);
+  const todayDictated = (todayRecord?.activities ?? "").trim().length >= ACTIVITIES_MIN;
 
   return (
     <section className="sc-fade-up overflow-hidden rounded-3xl border border-violet-200 bg-white" aria-label="Mes présences et mon journal de stage">
@@ -99,24 +89,32 @@ export function StageAttendance({ dossier, onChange }: { dossier: DossierJson; o
                 <p className="inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1 text-sm font-bold text-emerald-900">
                   <Clock3 size={15} aria-hidden /> Arrivée signée à {timeOf(todayRecord.arrivalAt)}
                 </p>
-                <label className="block text-sm">
-                  <span className="mb-1.5 block font-semibold text-slate-800">En fin de journée : qu&apos;avez-vous fait aujourd&apos;hui ?</span>
-                  <textarea
-                    className="block min-h-28 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-900 shadow-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 sm:text-sm"
-                    value={activities}
-                    onChange={(e) => setActivities(e.target.value)}
-                    placeholder="Ex. J'ai participé au rapprochement bancaire du mois de septembre avec le comptable, puis j'ai saisi 25 factures fournisseurs dans le logiciel."
-                  />
-                  <span className="mt-1 block text-xs text-slate-500">{activities.trim().length} caractère(s) — au moins {ACTIVITIES_MIN}. Ce texte servira à votre rapport de stage.</span>
-                </label>
-                <button type="button" disabled={busy || activities.trim().length < ACTIVITIES_MIN} onClick={() => void sign({ action: "depart", activities })} className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-sky-600 px-6 text-sm font-black text-white shadow-lg shadow-indigo-500/30 disabled:opacity-50">
+                <VoiceJournal dossier={dossier} record={todayRecord} onChange={onChange} />
+                {todayDictated ? (
+                  <p className="text-sm text-slate-700">Votre compte rendu dicté et validé sera repris à la clôture de la journée.</p>
+                ) : (
+                  <label className="block text-sm">
+                    <span className="mb-1.5 block font-semibold text-slate-800">Ou écrivez directement : qu&apos;avez-vous fait aujourd&apos;hui ?</span>
+                    <textarea
+                      className="block min-h-28 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-900 shadow-sm outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 sm:text-sm"
+                      value={activities}
+                      onChange={(e) => setActivities(e.target.value)}
+                      placeholder="Ex. J'ai participé au rapprochement bancaire du mois de septembre avec le comptable, puis j'ai saisi 25 factures fournisseurs dans le logiciel."
+                    />
+                    <span className="mt-1 block text-xs text-slate-500">{activities.trim().length} caractère(s) — au moins {ACTIVITIES_MIN}. Vous pourrez encore dicter votre journée ce soir ou demain.</span>
+                  </label>
+                )}
+                <button type="button" disabled={busy || (!todayDictated && activities.trim().length < ACTIVITIES_MIN)} onClick={() => void sign({ action: "depart", activities: todayDictated ? "" : activities })} className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-sky-600 px-6 text-sm font-black text-white shadow-lg shadow-indigo-500/30 disabled:opacity-50">
                   {busy ? <Loader2 size={18} className="animate-spin" aria-hidden /> : <LogOut size={18} aria-hidden />} Je clôture ma journée
                 </button>
               </div>
             ) : (
-              <p className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-900">
-                <BadgeCheck size={18} aria-hidden /> Journée clôturée : arrivée {timeOf(todayRecord.arrivalAt)}, départ {timeOf(todayRecord.departureAt)} ({duration(todayRecord)}). À demain !
-              </p>
+              <div className="mt-3 space-y-3">
+                <p className="inline-flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-900">
+                  <BadgeCheck size={18} aria-hidden /> Journée clôturée : arrivée {timeOf(todayRecord.arrivalAt)}, départ {timeOf(todayRecord.departureAt)} ({duration(todayRecord)}).
+                </p>
+                <VoiceJournal dossier={dossier} record={todayRecord} onChange={onChange} />
+              </div>
             )}
             {message ? (
               <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900" role="alert">
@@ -137,17 +135,16 @@ export function StageAttendance({ dossier, onChange }: { dossier: DossierJson; o
           </div>
         ) : null}
 
-        {dossier.attendance.length ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-dashed border-violet-300 bg-violet-50/50 p-4">
-            <p className="flex items-start gap-2 text-sm text-violet-950">
-              <NotebookPen size={18} className="mt-0.5 shrink-0 text-violet-600" aria-hidden />
-              {status === "termine" ? "Votre rapport de stage est prêt à compléter : vos comptes rendus y sont repris jour par jour." : "Votre rapport se construit au fil des jours : téléchargez le projet à tout moment."}
+        {yesterdayRecord ? (
+          <div className="space-y-2">
+            <p className="flex items-center gap-2 text-sm font-semibold text-fuchsia-900">
+              <Mic size={16} aria-hidden /> Vous pouvez encore compléter la journée d&apos;hier.
             </p>
-            <button type="button" onClick={report} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-bold text-white hover:bg-slate-700">
-              <Download size={16} aria-hidden /> {status === "termine" ? "Mon rapport de stage (Word)" : "Projet de rapport (Word)"}
-            </button>
+            <VoiceJournal dossier={dossier} record={yesterdayRecord} onChange={onChange} />
           </div>
         ) : null}
+
+        {dossier.attendance.length ? <ReportBuilder dossier={dossier} finished={status === "termine"} onChange={onChange} /> : null}
 
         <div>
           <h4 className="flex items-center gap-2 text-base font-extrabold text-slate-900">

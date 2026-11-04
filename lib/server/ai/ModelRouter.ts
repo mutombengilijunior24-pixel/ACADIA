@@ -74,6 +74,10 @@ const DEFAULT_COMPLEXITY_BY_OPERATION: Record<AIOperation, AIComplexity> = {
   REFERENCE_ANALYSIS: "STANDARD",
   // Lecture comparée d'une phrase et d'un résumé : jugement fin, jamais économique.
   REFERENCE_CONTEXT: "STANDARD",
+  // Journal de stage : la transcription utilise son propre modèle audio (OPENAI_TRANSCRIBE_MODEL) ;
+  // la rédaction d'une journée ou du rapport demande un français soigné.
+  STAGE_TRANSCRIPTION: "ECONOMY",
+  STAGE_JOURNAL: "STANDARD",
   OTHER: "STANDARD",
 };
 

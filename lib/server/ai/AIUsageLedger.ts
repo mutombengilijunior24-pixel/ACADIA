@@ -40,6 +40,11 @@ export const AI_OPERATIONS = [
   // bibliographique ; elle ne décide jamais de l'existence d'une
   // référence (voir lib/ai/openai/ReferenceContextAI.ts).
   "REFERENCE_CONTEXT",
+  // MNJ Stage Connect — journal vocal : transcription des notes vocales
+  // (l'audio n'est jamais conservé), puis relances, rédaction de la
+  // journée et des parties du rapport (lib/ai/openai/StageJournalAI.ts).
+  "STAGE_TRANSCRIPTION",
+  "STAGE_JOURNAL",
   // Research Writing Engine (mission dédiée) — génération de prose
   // pour introduction/problématique/méthodologie/cadre théorique
   // (lib/ai/openai/ResearchWritingAI.ts). Discussion/conclusion/

@@ -1,12 +1,14 @@
-// MNJ Stage Connect — rapport de stage (projet à compléter) et registre de présences, à partir du journal.
-// Rien n'est rédigé à la place de l'étudiant : ses comptes rendus journaliers sont repris tels quels, et les
-// parties qu'il doit écrire sont marquées « [À rédiger : …] ».
+// MNJ Stage Connect — rapport de stage et registre de présences, à partir du journal.
+// Les comptes rendus journaliers sont ceux que l'étudiant a validés (écrits, ou dictés puis rédigés avec
+// ACADIA), repris avec leurs sous-titres. Remerciements, introduction, bilan et conclusion viennent des
+// parties rédigées qu'il a relues ; sans elles, ces parties restent marquées « [À rédiger : …] ».
 
 import type { ReportDocument } from "@/lib/core/export/document";
 import type { Cell, Sheet } from "@/lib/core/export/xlsx";
 
 import { ATTENDANCE_MIN_RATE, FACULTY_BY_ID, STAGE_TIMEZONE, STAGE_TYPE_LABELS, type StageType } from "./catalog";
-import { formatDay, summarizeAttendance, type AttendanceRecord, type AttendanceSummary } from "./workflow";
+import { parseReportDraft, splitSections } from "./journal";
+import { formatDay, formatDayTitle, summarizeAttendance, type AttendanceRecord, type AttendanceSummary } from "./workflow";
 
 export interface StageReportInput {
   type: StageType;
@@ -28,6 +30,23 @@ export interface StageReportInput {
   startDate: string | null;
   endDate: string | null;
   attendance: AttendanceRecord[];
+  /** Parties rédigées (JSON enregistré dans le dossier), si l'étudiant les a générées. */
+  reportDraft?: string | null;
+}
+
+/** Paragraphes d'un texte (séparés par une ligne vide). */
+const paragraphs = (text: string): ReportDocument["blocks"] =>
+  text
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => ({ type: "p" as const, text: p }));
+
+/** Compte rendu d'une journée : ses sections (sous-titres) quand il en a, sinon le texte tel quel. */
+function dayBlocks(activities: string | null): ReportDocument["blocks"] {
+  const text = activities?.trim();
+  if (!text) return [{ type: "p", text: "[Journée non décrite dans le journal.]" }];
+  return splitSections(text).flatMap((s) => [...(s.title ? [{ type: "h3" as const, text: s.title }] : []), ...paragraphs(s.text)]);
 }
 
 export const fullName = (s: { lastName: string; postName: string; firstName: string }) => [s.lastName, s.postName, s.firstName].filter(Boolean).join(" ");
@@ -66,18 +85,24 @@ function weeks(records: AttendanceRecord[]): AttendanceRecord[][] {
 export function stageReportDocument(s: StageReportInput, today: string): ReportDocument {
   const summary = summarizeAttendance(s.attendance, s.startDate, s.endDate, today);
   const period = s.startDate && s.endDate ? `du ${formatDay(s.startDate)} au ${formatDay(s.endDate)}` : "(dates à préciser)";
+  const draft = parseReportDraft(s.reportDraft ?? null);
   const blocks: ReportDocument["blocks"] = [
     { type: "title", text: `Rapport de ${STAGE_TYPE_LABELS[s.type].toLowerCase()}` },
     { type: "meta", text: `Présenté par ${fullName(s)}${s.studentNumber ? ` (matricule ${s.studentNumber})` : ""}` },
     { type: "meta", text: `${s.university} — ${facultyOf(s)} — ${s.department} — ${s.level}` },
     { type: "meta", text: `Stage effectué chez ${s.assignedCompany ?? "[entreprise]"} ${period}` },
     { type: "meta", text: `Maître de stage : ${s.tutorName ?? "[à préciser]"}${s.tutorRole ? `, ${s.tutorRole}` : ""}` },
-    { type: "warn", text: "Projet de rapport préparé par ACADIA à partir de votre journal de stage. Vos comptes rendus sont repris tels que vous les avez écrits ; les parties entre crochets sont à rédiger par vous. Relisez, complétez et faites valider par votre encadreur avant le dépôt." },
+    { type: "warn", text: draft ? "Rapport préparé avec ACADIA à partir de votre journal de stage et des parties rédigées que vous avez relues. Les parties entre crochets restent à rédiger. Relisez l'ensemble et faites-le valider par votre encadreur avant le dépôt." : "Projet de rapport préparé par ACADIA à partir de votre journal de stage. Vos comptes rendus sont repris tels que vous les avez validés ; les parties entre crochets sont à rédiger par vous (ou à générer dans ACADIA). Relisez, complétez et faites valider par votre encadreur avant le dépôt." },
+    ...(draft?.remerciements ? [{ type: "h1" as const, text: "Remerciements" }, ...paragraphs(draft.remerciements)] : []),
     { type: "h1", text: "Introduction" },
-    { type: "p", text: "[À rédiger : le contexte de votre stage, son intérêt pour votre formation, et le plan du rapport.]" },
-    { type: "p", text: "Objectifs fixés à l'inscription :", bold: true },
-    { type: "p", text: s.objectives },
-    ...(s.skills.length ? [{ type: "p" as const, text: "Compétences visées :", bold: true }, { type: "bullets" as const, items: s.skills }] : []),
+    ...(draft?.introduction
+      ? paragraphs(draft.introduction)
+      : [
+          { type: "p" as const, text: "[À rédiger : le contexte de votre stage, son intérêt pour votre formation, et le plan du rapport.]" },
+          { type: "p" as const, text: "Objectifs fixés à l'inscription :", bold: true },
+          { type: "p" as const, text: s.objectives },
+          ...(s.skills.length ? [{ type: "p" as const, text: "Compétences visées :", bold: true }, { type: "bullets" as const, items: s.skills }] : []),
+        ]),
     { type: "h1", text: "Chapitre 1 — Présentation de l'entreprise" },
     { type: "p", text: `${s.assignedCompany ?? "[Entreprise]"}${s.companyAddress ? `, ${s.companyAddress}` : ""}.` },
     { type: "p", text: "[À rédiger : historique, activités, organisation (organigramme) et service qui vous a accueilli.]" },
@@ -87,16 +112,16 @@ export function stageReportDocument(s: StageReportInput, today: string): ReportD
   weeks(s.attendance).forEach((week, i) => {
     blocks.push({ type: "h2", text: `Semaine ${i + 1} (du ${formatDay(week[0].day)} au ${formatDay(week[week.length - 1].day)})` });
     for (const r of week) {
-      blocks.push({ type: "p", text: formatDay(r.day), bold: true });
-      blocks.push({ type: "p", text: r.activities?.trim() || "[Journée non décrite dans le journal.]" });
+      blocks.push({ type: "p", text: formatDayTitle(r.day), bold: true });
+      blocks.push(...dayBlocks(r.activities));
     }
   });
   if (!s.attendance.length) blocks.push({ type: "p", text: "[Aucune journée enregistrée dans le journal pour l'instant.]" });
   blocks.push(
     { type: "h1", text: "Chapitre 3 — Bilan du stage" },
-    { type: "p", text: "[À rédiger : ce que vous avez appris au regard des compétences visées, les difficultés rencontrées et la façon dont vous les avez surmontées, l'apport du stage pour votre formation.]" },
+    ...(draft?.bilan ? paragraphs(draft.bilan) : [{ type: "p" as const, text: "[À rédiger : ce que vous avez appris au regard des compétences visées, les difficultés rencontrées et la façon dont vous les avez surmontées, l'apport du stage pour votre formation.]" }]),
     { type: "h1", text: "Conclusion" },
-    { type: "p", text: "[À rédiger : synthèse du stage, recommandations éventuelles à l'entreprise, perspectives.]" },
+    ...(draft?.conclusion ? paragraphs(draft.conclusion) : [{ type: "p" as const, text: "[À rédiger : synthèse du stage, recommandations éventuelles à l'entreprise, perspectives.]" }]),
     { type: "h1", text: "Annexe — Registre de présences" },
     { type: "p", text: summaryLine(summary) },
     { type: "table", head: ["Jour", "Arrivée", "Départ", "Durée", "Confirmé par l'entreprise"], rows: [...s.attendance].sort((a, b) => a.day.localeCompare(b.day)).map((r) => [formatDay(r.day), timeOf(r.arrivalAt), timeOf(r.departureAt), duration(r), r.tutorConfirmedAt ? "Oui" : "Non"]) },

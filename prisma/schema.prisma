@@ -1424,6 +1424,8 @@ model StageApplication {
   tutorEmail        String?
   startDate         String? // AAAA-MM-JJ
   endDate           String? // AAAA-MM-JJ (inclus)
+  // Parties rédigées du rapport (remerciements, introduction, bilan, conclusion), JSON — lib/core/stages/journal.ts
+  reportDraft       String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -1456,6 +1458,10 @@ model StageAttendance {
   departureAt      DateTime?
   activities       String?
   tutorConfirmedAt DateTime?
+  // Journal vocal : paroles transcrites de l'étudiant (notes et réponses aux relances), jamais l'audio.
+  transcript       String?
+  journalSource    String? // saisie | vocal
+  writtenAt        DateTime? // validation de la version rédigée
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 

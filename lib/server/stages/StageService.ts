@@ -25,9 +25,11 @@ import { createHash, randomBytes } from "node:crypto";
 
 import type { Payment, Prisma, StageAccess, StageApplication, StageAttendance } from "@prisma/client";
 
-import { DEFAULT_STAGE_OPTIONS, FACULTY_BY_ID, isPaid, normalizeOptions, optionsTotal, REQUIRED_DOCUMENTS, STAGE_PACK, type StageApplicationInput, type StageOptionId, type StageType } from "@/lib/core/stages/catalog";
+import { ACTIVITIES_MIN, DEFAULT_STAGE_OPTIONS, FACULTY_BY_ID, isPaid, normalizeOptions, optionsTotal, REQUIRED_DOCUMENTS, STAGE_PACK, type StageApplicationInput, type StageOptionId, type StageType } from "@/lib/core/stages/catalog";
 import { momoAccountsSchema, normalizeMsisdn, paymentReference, type MomoAccount, type PaymentDeclaration } from "@/lib/core/stages/momo";
-import { attendanceError, computeStatus, dayKey, defaultEndDate, isDay, type AttendanceAction, type WorkflowFacts } from "@/lib/core/stages/workflow";
+import { appendTranscript, JOURNAL_LIMITS, journalError, parseReportDraft, usableDays, type ReportDraft, type ReportDraftParts, type TranscriptEntry } from "@/lib/core/stages/journal";
+import { attendanceError, computeStatus, dayKey, defaultEndDate, formatDay, isDay, type AttendanceAction, type WorkflowFacts } from "@/lib/core/stages/workflow";
+import type { DayInput, ReportInput, StageContext } from "@/lib/ai/openai/StageJournalAI";
 import { logAudit } from "@/lib/server/audit/AuditLog";
 import { getPaymentProvider } from "@/lib/server/billing/payment/PaymentProviderFactory";
 import * as PaymentRepository from "@/lib/server/billing/payment/PaymentRepository";
@@ -58,6 +60,14 @@ export interface AttendanceView {
   departureAt: Date | null;
   activities: string | null;
   tutorConfirmedAt: Date | null;
+  /** « vocal » quand la journée a été dictée puis rédigée avec ACADIA. */
+  journalSource: string | null;
+  writtenAt: Date | null;
+}
+
+/** Vue de l'étudiant lui-même : avec ses paroles transcrites (jamais montrées à la faculté ni à l'entreprise). */
+export interface OwnerAttendanceView extends AttendanceView {
+  transcript: string | null;
 }
 
 export interface PaymentChannels {
@@ -70,7 +80,7 @@ export interface PaymentChannels {
 }
 
 export interface StageDossier extends StageApplicationView {
-  attendance: AttendanceView[];
+  attendance: OwnerAttendanceView[];
   /** Jour de référence du serveur (AAAA-MM-JJ), pour que l'écran et le serveur raisonnent sur la même date. */
   today: string;
   payment: PaymentChannels;
@@ -123,7 +133,8 @@ const list = (json: string): string[] => {
 
 const view = (a: StageApplication): StageApplicationView => ({ ...a, skills: list(a.skills), documentsReceived: list(a.documentsReceived), packOptions: list(a.packOptions) });
 
-const attendanceView = (r: StageAttendance): AttendanceView => ({ day: r.day, arrivalAt: r.arrivalAt, departureAt: r.departureAt, activities: r.activities, tutorConfirmedAt: r.tutorConfirmedAt });
+const attendanceView = (r: StageAttendance): AttendanceView => ({ day: r.day, arrivalAt: r.arrivalAt, departureAt: r.departureAt, activities: r.activities, tutorConfirmedAt: r.tutorConfirmedAt, journalSource: r.journalSource, writtenAt: r.writtenAt });
+const ownerAttendanceView = (r: StageAttendance): OwnerAttendanceView => ({ ...attendanceView(r), transcript: r.transcript });
 
 export const today = () => dayKey(new Date());
 
@@ -194,7 +205,7 @@ async function ownedOrThrow(userId: string, id: string): Promise<StageApplicatio
 
 async function dossier(a: StageApplication): Promise<StageDossier> {
   const [attendance, payment] = await Promise.all([prisma.stageAttendance.findMany({ where: { applicationId: a.id }, orderBy: { day: "asc" } }), paymentChannels(a.id)]);
-  return { ...view(a), attendance: attendance.map(attendanceView), today: today(), payment };
+  return { ...view(a), attendance: attendance.map(ownerAttendanceView), today: today(), payment };
 }
 
 /**
@@ -255,12 +266,113 @@ export async function signAttendance(userId: string, id: string, input: Attendan
       throw e;
     }
   } else {
+    // Journée déjà dictée et validée avant le départ : son compte rendu est gardé tel quel.
+    const activities = input.activities.trim() || existing?.activities?.trim() || "";
     // Mise à jour conditionnelle : une journée clôturée ne peut plus être réécrite (double clic, deux onglets).
-    const { count } = await prisma.stageAttendance.updateMany({ where: { applicationId: id, day, departureAt: null }, data: { departureAt: new Date(), activities: input.activities.trim() } });
+    const { count } = await prisma.stageAttendance.updateMany({ where: { applicationId: id, day, departureAt: null }, data: { departureAt: new Date(), activities } });
     if (!count) throw new StageError("invalid_state", "Votre journée est déjà clôturée.");
   }
   await logAudit({ actorId: userId, action: "STAGE_ATTENDANCE_SIGNED", entityType: "StageApplication", entityId: id, metadata: { day, action: input.action } });
   return dossier(a);
+}
+
+/* ------------------------------------ Journal vocal ------------------------------------ */
+
+/** Dossier de l'étudiant et journée à compléter (le jour même ou le lendemain). */
+async function journalDay(userId: string, id: string, day: string) {
+  if (!isDay(day)) throw new StageError("invalid_input", "Jour invalide.");
+  const a = await syncStatus(await ownedOrThrow(userId, id), userId);
+  const record = await prisma.stageAttendance.findUnique({ where: { applicationId_day: { applicationId: id, day } } });
+  const error = journalError({ status: a.status, record, day, today: today() });
+  if (error) throw new StageError("invalid_state", error);
+  return { a, record: record! };
+}
+
+/** Vérifie la journée AVANT toute transcription (rien n'est payé pour une journée fermée) ; rend le contexte du stage. */
+export async function journalContext(userId: string, id: string, day: string): Promise<StageContext> {
+  const { a } = await journalDay(userId, id, day);
+  return stageContext(a);
+}
+
+/** Ajoute une note vocale transcrite (ou une réponse à une relance) aux paroles de la journée. */
+export async function appendJournalTranscript(userId: string, id: string, day: string, entry: TranscriptEntry): Promise<StageDossier> {
+  const { a, record } = await journalDay(userId, id, day);
+  await prisma.stageAttendance.update({ where: { id: record.id }, data: { transcript: appendTranscript(record.transcript, entry) } });
+  return dossier(a);
+}
+
+/** Paroles corrigées par l'étudiant (erreurs de transcription). */
+export async function saveJournalTranscript(userId: string, id: string, day: string, transcript: string): Promise<StageDossier> {
+  const { a, record } = await journalDay(userId, id, day);
+  await prisma.stageAttendance.update({ where: { id: record.id }, data: { transcript: transcript.trim().slice(0, JOURNAL_LIMITS.transcriptMax) || null } });
+  return dossier(a);
+}
+
+/** Ce que l'IA reçoit pour une journée : le dossier, les paroles du jour et les journées précédentes validées. */
+export async function journalDayInput(userId: string, id: string, day: string): Promise<{ input: DayInput; sources: string[] }> {
+  const { a, record } = await journalDay(userId, id, day);
+  if (!(record.transcript ?? "").trim()) throw new StageError("invalid_state", "Dictez d'abord votre journée (ou écrivez-la).");
+  const previous = await prisma.stageAttendance.findMany({ where: { applicationId: id, day: { lt: day } }, orderBy: { day: "asc" } });
+  const context = stageContext(a);
+  const previousDays = usableDays(previous).map((r) => ({ dayLabel: formatDay(r.day), text: r.activities ?? "" }));
+  const input: DayInput = { ...context, dayLabel: formatDay(day), transcript: record.transcript ?? "", previousDays };
+  // Sources du garde-fou : paroles, journées précédentes, dossier, et les dates (jour rédigé, période du stage).
+  const dates = [input.dayLabel, ...previousDays.map((d) => d.dayLabel), context.startDate && formatDay(context.startDate), context.endDate && formatDay(context.endDate), context.startDate, context.endDate].filter(Boolean).join(" ");
+  return { input, sources: [record.transcript ?? "", ...previousDays.map((d) => d.text), contextSources(context), dates] };
+}
+
+/** Version rédigée relue et validée par l'étudiant : elle devient le compte rendu de la journée. */
+export async function validateJournal(userId: string, id: string, day: string, activities: string): Promise<StageDossier> {
+  const { a, record } = await journalDay(userId, id, day);
+  const text = activities.trim();
+  if (text.length < ACTIVITIES_MIN) throw new StageError("invalid_input", `Le compte rendu doit contenir au moins ${ACTIVITIES_MIN} caractères.`);
+  if (text.length > JOURNAL_LIMITS.activitiesMax) throw new StageError("invalid_input", "Ce compte rendu est trop long.");
+  await prisma.stageAttendance.update({ where: { id: record.id }, data: { activities: text, journalSource: (record.transcript ?? "").trim() ? "vocal" : "saisie", writtenAt: new Date() } });
+  await logAudit({ actorId: userId, action: "STAGE_JOURNAL_UPDATED", entityType: "StageApplication", entityId: id, metadata: { day, chars: text.length, vocal: !!(record.transcript ?? "").trim() } });
+  return dossier(a);
+}
+
+/* ------------------------------------ Rapport : parties rédigées ------------------------------------ */
+
+export function stageContext(a: StageApplication): StageContext {
+  return {
+    studentName: [a.lastName, a.postName, a.firstName].filter(Boolean).join(" "),
+    university: a.university,
+    faculty: a.facultyName || FACULTY_BY_ID[a.faculty]?.label || a.faculty,
+    department: a.department,
+    level: a.level,
+    company: a.assignedCompany,
+    companyAddress: a.companyAddress,
+    tutorName: a.tutorName,
+    tutorRole: a.tutorRole,
+    startDate: a.startDate,
+    endDate: a.endDate,
+    objectives: a.objectives,
+    skills: list(a.skills),
+  };
+}
+
+const contextSources = (c: StageContext) => [c.studentName, c.university, c.faculty, c.department, c.level, c.company, c.companyAddress, c.tutorName, c.tutorRole, c.objectives, c.skills.join(" ")].filter(Boolean).join(" ");
+
+/** Ce que l'IA reçoit pour le rapport : le dossier et toutes les journées validées. */
+export async function reportInputOf(userId: string, id: string): Promise<ReportInput> {
+  const a = await syncStatus(await ownedOrThrow(userId, id), userId);
+  if (a.status === "annule") throw new StageError("invalid_state", "Ce dossier est annulé.");
+  const records = await prisma.stageAttendance.findMany({ where: { applicationId: id }, orderBy: { day: "asc" } });
+  const days = usableDays(records).map((r) => ({ dayLabel: formatDay(r.day), text: r.activities ?? "" }));
+  if (!days.length) throw new StageError("invalid_state", "Votre journal ne contient encore aucune journée décrite : complétez-le avant de générer votre rapport.");
+  return { ...stageContext(a), days };
+}
+
+/** Parties du rapport, générées par ACADIA (generated) ou modifiées par l'étudiant. */
+export async function saveReportDraft(userId: string, id: string, parts: ReportDraftParts, generated: boolean): Promise<StageDossier> {
+  const a = await ownedOrThrow(userId, id);
+  const previous = parseReportDraft(a.reportDraft);
+  const now = new Date().toISOString();
+  const draft: ReportDraft = { ...parts, generatedAt: generated ? now : (previous?.generatedAt ?? null), updatedAt: now };
+  const updated = await prisma.stageApplication.update({ where: { id }, data: { reportDraft: JSON.stringify(draft) } });
+  await logAudit({ actorId: userId, action: "STAGE_REPORT_DRAFTED", entityType: "StageApplication", entityId: id, metadata: { generated } });
+  return dossier(updated);
 }
 
 /* ------------------------------------ Paiement ------------------------------------ */
