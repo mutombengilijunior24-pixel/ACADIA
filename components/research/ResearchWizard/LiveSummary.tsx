@@ -1,52 +1,23 @@
 "use client";
 
 import { useResearch } from "@/contexts/ResearchContext";
-import { CheckCircle2, CircleDashed, FileSpreadsheet, Layers, MapPin, Target, Users } from "lucide-react";
+import { chosenSpecialty } from "@/lib/core/research/workflow";
+import { CheckCircle2, CircleDashed, Layers } from "lucide-react";
 
 export default function LiveSummary() {
   const { currentResearch } = useResearch();
 
   const sections = [
     {
-      title: "Cadrage initial",
+      title: "Mon projet",
       icon: Layers,
       items: [
         { label: "Sujet", value: currentResearch.title },
         { label: "Domaine", value: currentResearch.domain },
+        { label: "Spécialité", value: chosenSpecialty(currentResearch)?.label ?? "" },
         { label: "Niveau", value: currentResearch.level },
-        { label: "Institution", value: currentResearch.university },
-        { label: "Type", value: currentResearch.researchType },
-      ],
-    },
-    {
-      title: "Problématique & Objectifs",
-      icon: Target,
-      items: [
-        { label: "Problématique", value: currentResearch.problem },
-        { label: "Objectif général", value: currentResearch.objective },
-        {
-          label: "Obj. spécifiques",
-          value:
-            currentResearch.objectives && currentResearch.objectives.length > 0
-              ? `${currentResearch.objectives.length} objectif(s)`
-              : "",
-        },
-      ],
-    },
-    {
-      title: "Terrain & Collecte",
-      icon: Users,
-      items: [
-        { label: "Population", value: currentResearch.population },
-        {
-          label: "Taille estimée",
-          value:
-            currentResearch.populationSize > 0
-              ? `${currentResearch.populationSize} personnes`
-              : "",
-        },
-        { label: "Lieu", value: currentResearch.location },
-        { label: "Collecte", value: currentResearch.collectionMethod },
+        { label: "Université", value: currentResearch.university },
+        { label: "Directeur", value: currentResearch.directorName ?? "" },
       ],
     },
   ];
@@ -68,7 +39,7 @@ export default function LiveSummary() {
       <div className="flex items-center justify-between border-b border-slate-100 pb-4">
         <div>
           <p className="text-2xs font-bold tracking-[0.14em] text-acadia-blue uppercase">
-            Research Snapshot
+            Résumé
           </p>
           <h2 className="mt-0.5 text-lg font-bold text-acadia-navy">
             Votre recherche prend forme

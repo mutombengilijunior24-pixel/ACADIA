@@ -1,5 +1,6 @@
 "use client";
 
+import { WIZARD_STEPS } from "@/lib/core/research/workflow";
 import ResearchBrand from "./brand/ResearchBrand";
 
 interface Props {
@@ -7,23 +8,7 @@ interface Props {
   totalSteps: number;
 }
 
-export const STEP_METADATA = [
-  { index: 0, title: "Introduction", category: "Accueil" },
-  { index: 1, title: "Sujet de recherche", category: "Cadrage" },
-  { index: 2, title: "Domaine disciplinaire", category: "Cadrage" },
-  { index: 3, title: "Niveau académique", category: "Cadrage" },
-  { index: 4, title: "Institution", category: "Cadrage" },
-  { index: 5, title: "Type de recherche", category: "Méthodologie" },
-  { index: 6, title: "Problématique", category: "Objectifs" },
-  { index: 7, title: "Objectif général", category: "Objectifs" },
-  { index: 8, title: "Objectifs spécifiques", category: "Objectifs" },
-  { index: 9, title: "Population d'étude", category: "Terrain" },
-  { index: 10, title: "Taille de la population", category: "Terrain" },
-  { index: 11, title: "Cadre géographique", category: "Terrain" },
-  { index: 12, title: "Méthode de collecte", category: "Collecte" },
-  { index: 13, title: "Synthèse méthodologique", category: "Recommandations" },
-  { index: 14, title: "Validation finale", category: "Finalisation" },
-];
+export const STEP_METADATA = WIZARD_STEPS.map((step, index) => ({ index, ...step }));
 
 export default function ProgressBar({ currentStep, totalSteps }: Props) {
   const current = Math.min(Math.max(currentStep, 0), totalSteps - 1);

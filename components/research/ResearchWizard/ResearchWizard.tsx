@@ -1,20 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+import { useResearch } from "@/contexts/ResearchContext";
+import { canContinue, missingFor, WIZARD_TOTAL_STEPS } from "@/lib/core/research/workflow";
 import ProgressBar from "./ProgressBar";
 import StepRenderer from "./StepRenderer";
 import Navigation from "./Navigation";
 import LiveSummary from "./LiveSummary";
 
-const TOTAL_STEPS = 15;
-
 export default function ResearchWizard() {
+  const { currentResearch, currentProject, resetCurrentResearch } = useResearch();
   const [currentStep, setCurrentStep] = useState(0);
 
+  // Une recherche déjà enregistrée (projet créé) ne pré-remplit jamais la suivante ;
+  // une saisie en cours, non enregistrée, est conservée.
+  useEffect(() => {
+    if (currentProject) resetCurrentResearch();
+    // À l'ouverture de l'assistant uniquement.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // Une étape obligatoire incomplète bloque « Continuer » : on ne passe jamais sans sujet, ni sans spécialité.
+  const ready = canContinue(currentStep, currentResearch);
+  const missing = missingFor(currentStep, currentResearch);
+
   const handleNext = () => {
-    setCurrentStep((previousStep) =>
-      Math.min(previousStep + 1, TOTAL_STEPS - 1)
-    );
+    if (!ready) return;
+    setCurrentStep((previousStep) => Math.min(previousStep + 1, WIZARD_TOTAL_STEPS - 1));
   };
 
   const handlePrevious = () => {
@@ -23,27 +35,29 @@ export default function ResearchWizard() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 sm:space-y-6">
-      {/* BARRE DE PROGRESSION */}
-      <ProgressBar currentStep={currentStep} totalSteps={TOTAL_STEPS} />
+      <ProgressBar currentStep={currentStep} totalSteps={WIZARD_TOTAL_STEPS} />
 
-      {/* CONTENU PRINCIPAL & RÉSUMÉ */}
-      <div className="grid gap-5 lg:grid-cols-3 lg:gap-6 items-start">
-        {/* WIZARD CARD & NAVIGATION */}
+      <div className="grid items-start gap-5 lg:grid-cols-3 lg:gap-6">
         <main className="min-w-0 lg:col-span-2">
-          <div className="rounded-2xl border border-slate-200/70 bg-white p-6 sm:p-10 shadow-sm shadow-slate-900/5">
+          <div className="rounded-2xl border border-slate-200/70 bg-white p-6 shadow-sm shadow-slate-900/5 sm:p-10">
             <StepRenderer currentStep={currentStep} />
 
             <Navigation
               currentStep={currentStep}
-              totalSteps={TOTAL_STEPS}
+              totalSteps={WIZARD_TOTAL_STEPS}
               onNext={handleNext}
               onPrevious={handlePrevious}
-              nextLabel={currentStep === 0 ? "Commencer ma recherche" : "Continuer"}
+              isNextDisabled={!ready}
+              nextLabel="Continuer"
             />
+            {missing ? (
+              <p className="mt-3 text-right text-xs font-medium text-amber-700" role="status">
+                {missing}
+              </p>
+            ) : null}
           </div>
         </main>
 
-        {/* RÉSUMÉ EN DIRECT */}
         <aside className="min-w-0 lg:col-span-1">
           <LiveSummary />
         </aside>

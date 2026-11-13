@@ -66,11 +66,12 @@ function NewSurveyForm() {
   const [processingStep, setProcessingStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  const [title, setTitle] = useState("");
+  // Arrivée depuis « Récolter mes données » (Nouvelle recherche / projet) : sujet et université déjà connus.
+  const [title, setTitle] = useState(() => (searchParams.get("sujet") ?? "").slice(0, 300));
   const [objective, setObjective] = useState("");
   const [problem, setProblem] = useState("");
   const [targetAudience, setTargetAudience] = useState("");
-  const [institution, setInstitution] = useState("");
+  const [institution, setInstitution] = useState(() => (searchParams.get("institution") ?? "").slice(0, 160));
   const [categories, setCategories] = useState<string[]>(["Étudiant", "Enseignant"]);
   const [newCategory, setNewCategory] = useState("");
   const [measure, setMeasure] = useState({ institution: true, faculty: true, level: true, age: true, sex: true });

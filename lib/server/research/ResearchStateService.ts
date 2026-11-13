@@ -12,6 +12,7 @@
 
 import { prisma } from "@/lib/server/db/prisma";
 import { logAudit } from "@/lib/server/audit/AuditLog";
+import { directorLink, existingDirectorIds, resolveDirectorLink } from "@/lib/server/directors/DirectorsService";
 import type { Research } from "@/types/Research";
 import type { ResearchProject as ScientificProject } from "@/lib/core/research/ResearchTypes";
 import type { Dataset as ScientificDataset } from "@/lib/core/dataset/DatasetTypes";
@@ -149,6 +150,7 @@ export async function updateResearchProjectRecord(
             university: mergedResearch.university,
             description: mergedResearch.description,
             researchData: JSON.stringify(mergedResearch),
+            ...(await resolveDirectorLink(mergedResearch.directorId, mergedResearch.directorName)),
           }
         : {}),
       ...(mergedProject ? { payload: JSON.stringify(mergedProject) } : {}),
@@ -549,6 +551,10 @@ export async function setResearchProjectDataset(ownerId: string, id: string, dat
 export async function syncResearchState(ownerId: string, bundle: ResearchStateBundle): Promise<{ synced: number }> {
   let synced = 0;
 
+  // Directeurs de l'annuaire réellement existants, vérifiés en une requête :
+  // un id inconnu n'est jamais écrit (la clé étrangère bloquerait la synchronisation).
+  const knownDirectors = await existingDirectorIds(bundle.researches.map((r) => r.directorId));
+
   for (const research of bundle.researches) {
     const id = research.id;
     if (!id) continue;
@@ -561,6 +567,8 @@ export async function syncResearchState(ownerId: string, bundle: ResearchStateBu
     // toute la synchronisation pour les autres recherches.
     const existing = await prisma.researchProject.findUnique({ where: { id }, select: { ownerId: true } });
     if (existing && existing.ownerId !== ownerId) continue;
+
+    const link = directorLink(research, knownDirectors);
 
     await prisma.researchProject.upsert({
       where: { id },
@@ -582,6 +590,7 @@ export async function syncResearchState(ownerId: string, bundle: ResearchStateBu
         bibliography: bundle.bibliography[id] ? JSON.stringify(bundle.bibliography[id]) : null,
         theoreticalFramework: bundle.theoreticalFramework[id] ? JSON.stringify(bundle.theoreticalFramework[id]) : null,
         exportHistory: bundle.exportHistory[id] ? JSON.stringify(bundle.exportHistory[id]) : null,
+        ...link,
       },
       update: {
         title: research.title || "Recherche sans titre",
@@ -599,6 +608,7 @@ export async function syncResearchState(ownerId: string, bundle: ResearchStateBu
         bibliography: bundle.bibliography[id] ? JSON.stringify(bundle.bibliography[id]) : null,
         theoreticalFramework: bundle.theoreticalFramework[id] ? JSON.stringify(bundle.theoreticalFramework[id]) : null,
         exportHistory: bundle.exportHistory[id] ? JSON.stringify(bundle.exportHistory[id]) : null,
+        ...link,
       },
     });
     synced += 1;

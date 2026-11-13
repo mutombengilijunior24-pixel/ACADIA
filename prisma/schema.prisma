@@ -160,16 +160,51 @@ model ResearchProject {
   bibliography         String? // JSON (BibliographyReference[])
   theoreticalFramework String? // JSON (TheoreticalFrameworkEntry[])
   exportHistory        String? // JSON (ExportHistoryEntry[])
+  // Directeur de mémoire choisi dans l'annuaire (Director) ; directorName garde le nom affiché,
+  // ou le nom saisi librement quand le directeur n'est pas (encore) dans l'annuaire.
+  directorId           String?
+  directorName         String?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
-  owner User @relation("ResearchOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  owner    User      @relation("ResearchOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  director Director? @relation(fields: [directorId], references: [id], onDelete: SetNull)
 
   references         Reference[]
   referenceCitations ReferenceCitation[]
   claims             ResearchClaim[]
 
   @@index([ownerId])
+  @@index([directorId])
+}
+
+// ------------------------------------------------------------
+// ANNUAIRE DES DIRECTEURS DE MÉMOIRE — tenu par l'administration.
+// Distinct de SupervisorProfile (directeur titulaire d'un compte ACADIA) :
+// un directeur de l'annuaire n'a pas besoin de compte. Sa logique métier
+// (canevas, exigences) est recueillie peu à peu : notes internes et état
+// du canevas ; tant qu'elle n'est pas intégrée, ACADIA applique sa logique
+// générale. Jamais supprimé : désactivé, pour garder le lien avec les projets.
+// ------------------------------------------------------------
+
+model Director {
+  id            String   @id @default(cuid())
+  fullName      String
+  academicTitle String? // Professeur, Chef de travaux, Assistant…
+  institution   String? // acronyme (lib/core/stages/institutions.ts) ou nom saisi librement
+  faculty       String?
+  department    String?
+  specialties   String? // séparées par des virgules (même convention que SupervisorProfile)
+  notes         String? // interne à l'administration : ce que l'on sait de sa façon de travailler
+  logicStatus   String   @default("a_recueillir") // a_recueillir | en_cours | integre (lib/core/directors/directors.ts)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  projects ResearchProject[]
+
+  @@index([institution])
+  @@index([isActive])
 }
 
 // ------------------------------------------------------------

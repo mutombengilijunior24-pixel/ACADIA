@@ -32,6 +32,20 @@ export interface ResearchData {
   location: string;
 
   collectionMethod: string;
+
+  // Spécialité choisie dans le référentiel du moteur d'interprétation
+  // (SpecialtyId, lib/core/orchestrator/taxonomy.ts) ; `domain` en garde
+  // le libellé du domaine (« Économie », « Gestion »). Facultative : les
+  // projets antérieurs n'en ont pas.
+  specialty?: string;
+
+  // Directeur de mémoire (annuaire tenu par l'administration) : id de la
+  // fiche choisie, et nom affiché — ou nom saisi librement quand le
+  // directeur n'est pas dans l'annuaire. Facultatifs : les projets
+  // antérieurs n'en ont pas.
+  directorId?: string;
+
+  directorName?: string;
 }
 
 

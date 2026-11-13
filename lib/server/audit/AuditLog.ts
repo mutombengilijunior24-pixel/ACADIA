@@ -259,7 +259,11 @@ export type AuditAction =
   | "STAGE_ACCESS_VIEWED"
   | "STAGE_PAYMENT_DECLARED"
   | "STAGE_PAYMENT_REJECTED"
-  | "STAGE_SETTINGS_UPDATED";
+  | "STAGE_SETTINGS_UPDATED"
+  // Annuaire des directeurs de mémoire (lib/server/directors/DirectorsService.ts)
+  | "DIRECTOR_CREATED"
+  | "DIRECTOR_UPDATED"
+  | "DIRECTORS_IMPORTED";
 
 export async function logAudit(input: {
   actorId?: string;

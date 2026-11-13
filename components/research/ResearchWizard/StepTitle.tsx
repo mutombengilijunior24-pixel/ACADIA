@@ -5,48 +5,46 @@ import { Lightbulb } from "lucide-react";
 import ResearchStepHeader from "./brand/ResearchStepHeader";
 import ResearchTextArea from "./brand/ResearchTextArea";
 
+const EXAMPLES = [
+  "Impact du crédit bancaire sur la croissance des PME à Lubumbashi",
+  "Déterminants de l'inflation en RDC de 2010 à 2024",
+  "Effet de la motivation sur la performance des agents de la SNEL",
+];
+
 export default function StepTitle() {
   const { currentResearch, updateCurrentResearch } = useResearch();
-
-  const examples = [
-    "Impact de la transformation digitale sur la performance organisationnelle des PME",
-    "Déterminants de l'adoption des services bancaires mobiles chez les jeunes actifs",
-    "Facteurs psychosociaux influençant l'adhésion thérapeutique chez les patients chroniques",
-  ];
 
   return (
     <div className="space-y-6">
       <ResearchStepHeader
-        step={1}
+        step={0}
         category="Cadrage"
-        title="Décrivez votre sujet de recherche"
-        description="Formulez votre idée de recherche. Un bon sujet identifie généralement le phénomène étudié et le contexte ou groupe d'intérêt."
+        title="Quel est votre sujet de recherche ?"
+        description="Écrivez l'intitulé de votre travail tel que votre directeur l'a validé (ou tel que vous l'envisagez)."
       />
 
-      {/* Zone de rédaction */}
       <ResearchTextArea
         id="research-title"
-        label="Intitulé ou formulation du sujet"
+        label="Intitulé du sujet"
         required
-        rows={4}
+        rows={3}
         value={currentResearch.title}
         onChange={(value) => updateCurrentResearch("title", value)}
-        placeholder="Exemple : Analyse de l'impact de la gestion des compétences sur l'engagement des collaborateurs..."
+        placeholder="Exemple : Impact du crédit bancaire sur la croissance des PME à Lubumbashi"
       />
 
-      {/* Suggestions / Exemples */}
       <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4 sm:p-5">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-600">
           <Lightbulb className="h-4 w-4 text-amber-500" />
-          <span>Exemples de formulations pour vous inspirer :</span>
+          <span>Exemples en sciences économiques et de gestion :</span>
         </div>
         <div className="mt-3 space-y-2">
-          {examples.map((example, index) => (
+          {EXAMPLES.map((example) => (
             <button
-              key={index}
+              key={example}
               type="button"
               onClick={() => updateCurrentResearch("title", example)}
-              className="w-full text-left rounded-xl bg-white border border-slate-200/80 p-3 text-xs sm:text-sm text-slate-700 hover:border-acadia-blue hover:text-acadia-blue transition"
+              className="w-full rounded-xl border border-slate-200/80 bg-white p-3 text-left text-xs text-slate-700 transition hover:border-acadia-blue hover:text-acadia-blue sm:text-sm"
             >
               « {example} »
             </button>

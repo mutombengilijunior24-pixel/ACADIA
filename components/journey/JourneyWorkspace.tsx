@@ -94,12 +94,23 @@ function savedResearch(raw: unknown): ResearchUnderstandingInput | null {
   return v.ok ? v.input : null;
 }
 
-export default function JourneyWorkspace({ sessionId = null, initial = null, onSwitchEngine }: { sessionId?: string | null; initial?: SavedSession | null; onSwitchEngine?: (handoff: EngineHandoff) => void } = {}) {
+export default function JourneyWorkspace({
+  sessionId = null,
+  initial = null,
+  onSwitchEngine,
+  seedField = null,
+}: {
+  sessionId?: string | null;
+  initial?: SavedSession | null;
+  onSwitchEngine?: (handoff: EngineHandoff) => void;
+  /** Domaine et spécialité pré-sélectionnés (« Nouvelle recherche ») : l'étudiant les confirme, et voit la proposition du moteur dédié. */
+  seedField?: { domain: DomainId; specialty: SpecialtyId } | null;
+} = {}) {
   const snap = initial?.snapshot ?? null;
   // Spécialité à moteur dédié (Gestion financière) choisie alors qu'une interprétation existe déjà : confirmation.
   const [switchPrompt, setSwitchPrompt] = useState(false);
   // 0. Domaine et spécialité : perspective scientifique, modifiable sans perdre les données.
-  const [field, setField] = useState<{ domain: DomainId | null; specialty: SpecialtyId | null; secondary: SpecialtyId[] }>(() => (snap ? (snap.field as { domain: DomainId | null; specialty: SpecialtyId | null; secondary: SpecialtyId[] }) : { domain: null, specialty: null, secondary: [] }));
+  const [field, setField] = useState<{ domain: DomainId | null; specialty: SpecialtyId | null; secondary: SpecialtyId[] }>(() => (snap ? (snap.field as { domain: DomainId | null; specialty: SpecialtyId | null; secondary: SpecialtyId[] }) : { domain: seedField?.domain ?? null, specialty: seedField?.specialty ?? null, secondary: [] }));
   const [fieldConfirmed, setFieldConfirmed] = useState(() => snap?.fieldConfirmed ?? false);
   // Corrections de la classification par l'utilisateur (type de données, unité, structure).
   const [overrides, setOverrides] = useState<ClassificationOverrides>(() => (snap?.overrides as ClassificationOverrides) ?? {});

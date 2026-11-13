@@ -81,6 +81,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: { mobileOpen?: 
     ...(user?.role === "admin"
       ? [
           { title: "Comptes inscrits", href: "/dashboard/admin/users", icon: Users },
+          { title: "Directeurs de mémoire", href: "/dashboard/admin/directors", icon: GraduationCap },
           { title: "Produit", href: "/dashboard/admin/product", icon: BarChart3 },
           { title: "Stage Connect (CRM)", href: "/dashboard/admin/stages", icon: Contact },
         ]

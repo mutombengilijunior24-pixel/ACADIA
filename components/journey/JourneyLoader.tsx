@@ -11,6 +11,7 @@ import { parseEconSnapshot } from "@/lib/core/econometrics/persistence";
 import { parseFinanceSnapshot } from "@/lib/core/finance/persistence";
 import type { DedicatedEngine, EngineHandoff } from "@/lib/core/journey/kinds";
 import { parseSnapshot } from "@/lib/core/journey/persistence";
+import type { DomainId, SpecialtyId } from "@/lib/core/orchestrator/taxonomy";
 
 import JourneyWorkspace, { type SavedSession } from "./JourneyWorkspace";
 
@@ -26,7 +27,16 @@ type LoaderState =
  * « ?moteur=econometrie »), ou reprise d'une interprétation enregistrée (« ?s=<id> »), chargée AVANT le montage
  * pour initialiser toutes les décisions, dans le moteur avec lequel elle a été créée.
  */
-export default function JourneyLoader({ sessionId, engine = null }: { sessionId: string | null; engine?: DedicatedEngine | null }) {
+export default function JourneyLoader({
+  sessionId,
+  engine = null,
+  seed = null,
+}: {
+  sessionId: string | null;
+  engine?: DedicatedEngine | null;
+  /** Domaine et spécialité déjà choisis dans « Nouvelle recherche » (nouvelle interprétation du parcours général). */
+  seed?: { domain: DomainId; specialty: SpecialtyId } | null;
+}) {
   const [state, setState] = useState<LoaderState>(() => (sessionId ? { status: "loading" } : { status: "ready", kind: engine ?? "survey", saved: null }) as LoaderState);
   // Moteur dédié ouvert depuis le parcours général (nouvelle interprétation, avec le domaine et le sujet).
   const [handoff, setHandoff] = useState<EngineHandoff | null>(null);
@@ -93,6 +103,7 @@ export default function JourneyLoader({ sessionId, engine = null }: { sessionId:
       key={sessionId ?? "new"}
       sessionId={state.saved ? sessionId : null}
       initial={state.saved}
+      seedField={state.saved ? null : seed}
       onSwitchEngine={(next) => {
         // Nouvelle interprétation dans le moteur dédié ; l'adresse permet de rouvrir ce moteur.
         window.history.replaceState(null, "", `/dashboard/journey?moteur=${next.engine}`);

@@ -13,7 +13,7 @@ interface ResearchStepHeaderProps {
 
 export default function ResearchStepHeader({
   step,
-  totalSteps = 15,
+  totalSteps = 4,
   category,
   title,
   description,
