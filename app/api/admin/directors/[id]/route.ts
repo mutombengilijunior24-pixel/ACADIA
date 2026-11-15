@@ -9,7 +9,7 @@ import { z } from "zod";
 
 import { DIRECTOR_LOGIC_STATUSES } from "@/lib/core/directors/directors";
 import { requireAdmin } from "@/lib/server/admin/adminAuth";
-import { directorErrorResponse, updateDirector } from "@/lib/server/directors/DirectorsService";
+import { decideDirectoryLink, directorErrorResponse, updateDirector } from "@/lib/server/directors/DirectorsService";
 
 export const runtime = "nodejs";
 
@@ -27,6 +27,8 @@ const patchSchema = z.object({
   notes: optional(8000),
   logicStatus: z.enum(DIRECTOR_LOGIC_STATUSES).optional(),
   isActive: z.boolean().optional(),
+  // Rattachement du compte directeur : valider la demande, ou la refuser / retirer.
+  link: z.enum(["valider", "refuser"]).optional(),
 });
 
 export async function PATCH(request: Request, context: RouteContext) {
@@ -36,8 +38,10 @@ export async function PATCH(request: Request, context: RouteContext) {
   const parsed = patchSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: parsed.error.issues[0]?.message ?? "Requête invalide." }, { status: 400 });
   if (!Object.keys(parsed.data).length) return Response.json({ error: "Requête vide." }, { status: 400 });
+  const { link, ...fields } = parsed.data;
   try {
-    return Response.json({ director: await updateDirector(gate.user.id, id, parsed.data) }, { status: 200 });
+    if (link) return Response.json({ director: await decideDirectoryLink(gate.user.id, id, link) }, { status: 200 });
+    return Response.json({ director: await updateDirector(gate.user.id, id, fields) }, { status: 200 });
   } catch (error) {
     return directorErrorResponse(error);
   }

@@ -18,7 +18,11 @@ export const LOGIC_STATUS_LABELS: Record<DirectorLogicStatus, string> = {
   integre: "Canevas intégré",
 };
 
-/** Ce que voit un étudiant : jamais les notes internes de l'administration. */
+/**
+ * Ce que voit un étudiant : jamais les notes internes de l'administration.
+ * `logicStatus` vaut « integre » automatiquement dès que le directeur a un compte
+ * rattaché ET VALIDÉ avec un canevas actif (`hasCanevas`).
+ */
 export interface DirectorPublic {
   id: string;
   fullName: string;
@@ -28,6 +32,31 @@ export interface DirectorPublic {
   department: string | null;
   specialties: string | null;
   logicStatus: DirectorLogicStatus;
+  hasCanevas: boolean;
+}
+
+// ------------------------------------------------------------
+// RATTACHEMENT D'UN COMPTE DIRECTEUR À SA FICHE
+// Le directeur le demande depuis son compte ; l'administration le valide.
+// ------------------------------------------------------------
+
+export const DIRECTOR_LINK_STATUSES = ["demande", "valide"] as const;
+export type DirectorLinkStatus = (typeof DIRECTOR_LINK_STATUSES)[number];
+
+export const LINK_STATUS_LABELS: Record<DirectorLinkStatus, string> = {
+  demande: "Rattachement à valider",
+  valide: "Rattachement validé",
+};
+
+export function isLinkStatus(value: unknown): value is DirectorLinkStatus {
+  return typeof value === "string" && (DIRECTOR_LINK_STATUSES as readonly string[]).includes(value);
+}
+
+export interface DirectorAccountLink {
+  status: DirectorLinkStatus;
+  requestedAt: string | null;
+  accountName: string;
+  accountEmail: string;
 }
 
 export interface DirectorAdmin extends DirectorPublic {
@@ -35,6 +64,17 @@ export interface DirectorAdmin extends DirectorPublic {
   isActive: boolean;
   projects: number;
   createdAt: string;
+  updatedAt: string;
+  /** Compte directeur rattaché (demande ou validé), sinon null. */
+  account: DirectorAccountLink | null;
+}
+
+/** Canevas du directeur tel que le voit l'étudiant (canevas ACTIF du compte rattaché et validé). */
+export interface DirectorCanevasView {
+  directorLabel: string;
+  academicYear: string;
+  workTypes: string[];
+  steps: { name: string; description: string | null; required: boolean }[];
   updatedAt: string;
 }
 

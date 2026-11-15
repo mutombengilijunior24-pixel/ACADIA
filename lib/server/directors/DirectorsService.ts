@@ -10,12 +10,16 @@
 import { prisma } from "@/lib/server/db/prisma";
 import { logAudit } from "@/lib/server/audit/AuditLog";
 import {
+  directorLabel,
+  isLinkStatus,
   isLogicStatus,
   nameKey,
   parseDirectorLines,
   MAX_IMPORT_LINES,
   type DirectorAdmin,
+  type DirectorCanevasView,
   type DirectorInput,
+  type DirectorLinkStatus,
   type DirectorLogicStatus,
   type DirectorPublic,
   type UnlistedDirectorName,
@@ -41,9 +45,26 @@ const PUBLIC_SELECT = {
   department: true,
   specialties: true,
   logicStatus: true,
+  userId: true,
+  linkStatus: true,
 } as const;
 
-function toPublic(row: Omit<DirectorPublic, "logicStatus"> & { logicStatus: string }): DirectorPublic {
+type PublicRow = Omit<DirectorPublic, "logicStatus" | "hasCanevas"> & { logicStatus: string; userId: string | null; linkStatus: string | null };
+
+/** Comptes directeurs (parmi `userIds`) qui ont un canevas ACTIF. */
+async function accountsWithActiveCanevas(userIds: (string | null)[]): Promise<Set<string>> {
+  const ids = [...new Set(userIds.filter((id): id is string => Boolean(id)))];
+  if (!ids.length) return new Set();
+  const rows = await prisma.supervisionCanevas.findMany({ where: { supervisorId: { in: ids }, isActive: true }, select: { supervisorId: true } });
+  return new Set(rows.map((r) => r.supervisorId));
+}
+
+/** Seul un rattachement VALIDÉ par l'administration fait appliquer le canevas du compte. */
+const validatedAccount = (row: { userId: string | null; linkStatus: string | null }) => (row.linkStatus === "valide" && row.userId ? row.userId : null);
+
+function toPublic(row: PublicRow, withCanevas: Set<string>): DirectorPublic {
+  const account = validatedAccount(row);
+  const hasCanevas = Boolean(account && withCanevas.has(account));
   return {
     id: row.id,
     fullName: row.fullName,
@@ -52,30 +73,56 @@ function toPublic(row: Omit<DirectorPublic, "logicStatus"> & { logicStatus: stri
     faculty: row.faculty,
     department: row.department,
     specialties: row.specialties,
-    logicStatus: isLogicStatus(row.logicStatus) ? row.logicStatus : "a_recueillir",
+    // Automatique : un canevas actif du directeur vaut « intégré », sans intervention de l'administration.
+    logicStatus: hasCanevas ? "integre" : isLogicStatus(row.logicStatus) ? row.logicStatus : "a_recueillir",
+    hasCanevas,
   };
 }
 
 /** Pour les étudiants : directeurs actifs uniquement, jamais les notes. */
 export async function listActiveDirectors(): Promise<DirectorPublic[]> {
   const rows = await prisma.director.findMany({ where: { isActive: true }, select: PUBLIC_SELECT, orderBy: { fullName: "asc" } });
-  return rows.map(toPublic);
+  const withCanevas = await accountsWithActiveCanevas(rows.map(validatedAccount));
+  return rows.map((row) => toPublic(row, withCanevas));
 }
 
-/** Pour l'administration : tous les directeurs, avec notes et nombre de projets rattachés. */
-export async function listAdminDirectors(): Promise<DirectorAdmin[]> {
-  const rows = await prisma.director.findMany({
-    orderBy: [{ isActive: "desc" }, { fullName: "asc" }],
-    include: { _count: { select: { projects: true } } },
-  });
-  return rows.map((row) => ({
-    ...toPublic(row),
+type AdminRow = PublicRow & {
+  notes: string | null;
+  isActive: boolean;
+  linkRequestedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  _count: { projects: number };
+  account: { email: string; firstName: string; lastName: string | null } | null;
+};
+
+const ADMIN_INCLUDE = { _count: { select: { projects: true } }, account: { select: { email: true, firstName: true, lastName: true } } } as const;
+
+function toAdmin(row: AdminRow, withCanevas: Set<string>): DirectorAdmin {
+  return {
+    ...toPublic(row, withCanevas),
     notes: row.notes,
     isActive: row.isActive,
     projects: row._count.projects,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
-  }));
+    account:
+      row.account && isLinkStatus(row.linkStatus)
+        ? {
+            status: row.linkStatus,
+            requestedAt: row.linkRequestedAt ? row.linkRequestedAt.toISOString() : null,
+            accountName: [row.account.firstName, row.account.lastName].filter(Boolean).join(" "),
+            accountEmail: row.account.email,
+          }
+        : null,
+  };
+}
+
+/** Pour l'administration : tous les directeurs, avec notes, projets rattachés et compte directeur lié. */
+export async function listAdminDirectors(): Promise<DirectorAdmin[]> {
+  const rows = await prisma.director.findMany({ orderBy: [{ isActive: "desc" }, { fullName: "asc" }], include: ADMIN_INCLUDE });
+  const withCanevas = await accountsWithActiveCanevas(rows.map(validatedAccount));
+  return rows.map((row) => toAdmin(row, withCanevas));
 }
 
 /** Noms tapés par les étudiants dont le directeur n'est pas dans l'annuaire (les plus fréquents d'abord). */
@@ -125,7 +172,7 @@ export async function createDirector(actorId: string, input: DirectorInput & { n
     },
   });
   await logAudit({ actorId, action: "DIRECTOR_CREATED", entityType: "Director", entityId: row.id });
-  return { ...toPublic(row), notes: row.notes, isActive: row.isActive, projects: 0, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() };
+  return toAdmin({ ...row, _count: { projects: 0 }, account: null }, new Set());
 }
 
 export interface DirectorPatch extends Partial<DirectorInput> {
@@ -148,7 +195,7 @@ export async function updateDirector(actorId: string, id: string, patch: Directo
   if (patch.logicStatus !== undefined) data.logicStatus = patch.logicStatus;
   if (patch.isActive !== undefined) data.isActive = patch.isActive;
 
-  const row = await prisma.director.update({ where: { id }, data, include: { _count: { select: { projects: true } } } });
+  const row = await prisma.director.update({ where: { id }, data, include: ADMIN_INCLUDE });
   await logAudit({
     actorId,
     action: "DIRECTOR_UPDATED",
@@ -156,14 +203,7 @@ export async function updateDirector(actorId: string, id: string, patch: Directo
     entityId: id,
     metadata: { fields: Object.keys(data).join(","), isActive: patch.isActive },
   });
-  return {
-    ...toPublic(row),
-    notes: row.notes,
-    isActive: row.isActive,
-    projects: row._count.projects,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-  };
+  return toAdmin(row, await accountsWithActiveCanevas([validatedAccount(row)]));
 }
 
 /** Import d'une liste collée ; les noms déjà présents dans l'annuaire ne sont pas recréés. */
@@ -218,4 +258,126 @@ export function directorLink(research: { directorId?: string | null; directorNam
 
 export async function resolveDirectorLink(directorId: string | null | undefined, directorName: string | null | undefined): Promise<DirectorLinkColumns> {
   return directorLink({ directorId, directorName }, await existingDirectorIds([directorId]));
+}
+
+// ------------------------------------------------------------
+// CANEVAS DU DIRECTEUR, VU PAR L'ÉTUDIANT
+//
+// Le canevas ACTIF du compte rattaché et VALIDÉ s'applique automatiquement :
+// chaque fois que le directeur l'ajuste, l'étudiant voit la nouvelle version.
+// Sans rattachement validé ni canevas actif : null (logique générale d'ACADIA).
+// ------------------------------------------------------------
+
+function parseJson<T>(value: string | null | undefined, fallback: T): T {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+export async function getDirectorCanevas(directorId: string): Promise<DirectorCanevasView | null> {
+  const director = await prisma.director.findUnique({
+    where: { id: directorId },
+    select: { fullName: true, academicTitle: true, userId: true, linkStatus: true },
+  });
+  const account = director ? validatedAccount(director) : null;
+  if (!director || !account) return null;
+  const canevas = await prisma.supervisionCanevas.findFirst({ where: { supervisorId: account, isActive: true }, orderBy: { updatedAt: "desc" } });
+  if (!canevas) return null;
+  const steps = parseJson<{ name?: unknown; description?: unknown; order?: unknown; required?: unknown }[]>(canevas.steps, []);
+  return {
+    directorLabel: directorLabel(director),
+    academicYear: canevas.academicYear,
+    workTypes: parseJson<unknown[]>(canevas.workTypes, []).filter((w): w is string => typeof w === "string"),
+    steps: steps
+      .filter((s) => typeof s?.name === "string" && s.name.trim())
+      .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
+      .map((s) => ({ name: String(s.name).trim(), description: typeof s.description === "string" && s.description.trim() ? s.description.trim() : null, required: s.required !== false })),
+    updatedAt: canevas.updatedAt.toISOString(),
+  };
+}
+
+// ------------------------------------------------------------
+// RATTACHEMENT D'UN COMPTE DIRECTEUR À SA FICHE
+//
+// Le directeur (rôle supervisor) choisit son nom dans la liste : demande.
+// L'administration valide (ou refuse) depuis « Directeurs de mémoire ».
+// Une fiche ne peut être rattachée qu'à un seul compte, et un compte à une seule fiche.
+// ------------------------------------------------------------
+
+export interface MyDirectoryLink {
+  link: { directorId: string; label: string; status: DirectorLinkStatus; requestedAt: string | null } | null;
+  choices: { id: string; label: string; institution: string | null }[];
+  /** Projets d'étudiants qui ont choisi ce directeur (seulement une fois le rattachement validé). */
+  studentProjects: number;
+  hasActiveCanevas: boolean;
+}
+
+export async function getMyDirectoryLink(userId: string): Promise<MyDirectoryLink> {
+  const mine = await prisma.director.findUnique({ where: { userId }, include: { _count: { select: { projects: true } } } });
+  const choices = mine
+    ? []
+    : (await prisma.director.findMany({ where: { isActive: true, userId: null }, select: { id: true, fullName: true, academicTitle: true, institution: true }, orderBy: { fullName: "asc" } })).map(
+        (d) => ({ id: d.id, label: directorLabel(d), institution: d.institution })
+      );
+  const hasActiveCanevas = (await prisma.supervisionCanevas.count({ where: { supervisorId: userId, isActive: true } })) > 0;
+  return {
+    link:
+      mine && isLinkStatus(mine.linkStatus)
+        ? { directorId: mine.id, label: directorLabel(mine), status: mine.linkStatus, requestedAt: mine.linkRequestedAt ? mine.linkRequestedAt.toISOString() : null }
+        : null,
+    choices,
+    studentProjects: mine?.linkStatus === "valide" ? mine._count.projects : 0,
+    hasActiveCanevas,
+  };
+}
+
+const isUniqueViolation = (error: unknown) => typeof error === "object" && error !== null && (error as { code?: string }).code === "P2002";
+
+export async function requestDirectoryLink(userId: string, directorId: string): Promise<MyDirectoryLink> {
+  const already = await prisma.director.findUnique({ where: { userId }, select: { fullName: true, academicTitle: true } });
+  if (already) throw new DirectorError(`Votre compte est déjà rattaché à ${directorLabel(already)}. Annulez d'abord ce rattachement.`, 409);
+  const target = await prisma.director.findUnique({ where: { id: directorId }, select: { isActive: true, userId: true } });
+  if (!target || !target.isActive) throw new DirectorError("Directeur introuvable dans la liste.", 404);
+  if (target.userId) throw new DirectorError("Ce nom est déjà rattaché à un autre compte directeur. Contactez l'équipe ACADIA.", 409);
+  try {
+    // Condition « userId: null » : deux demandes simultanées ne peuvent pas prendre la même fiche.
+    const res = await prisma.director.updateMany({
+      where: { id: directorId, userId: null, isActive: true },
+      data: { userId, linkStatus: "demande", linkRequestedAt: new Date() },
+    });
+    if (res.count === 0) throw new DirectorError("Ce nom vient d'être rattaché à un autre compte directeur. Contactez l'équipe ACADIA.", 409);
+  } catch (error) {
+    if (isUniqueViolation(error)) throw new DirectorError("Votre compte est déjà rattaché à un directeur.", 409);
+    throw error;
+  }
+  await logAudit({ actorId: userId, action: "DIRECTOR_LINK_REQUESTED", entityType: "Director", entityId: directorId });
+  return getMyDirectoryLink(userId);
+}
+
+export async function cancelMyDirectoryLink(userId: string): Promise<MyDirectoryLink> {
+  const mine = await prisma.director.findUnique({ where: { userId }, select: { id: true } });
+  if (!mine) throw new DirectorError("Aucun rattachement à annuler.", 404);
+  await prisma.director.update({ where: { id: mine.id }, data: { userId: null, linkStatus: null, linkRequestedAt: null } });
+  await logAudit({ actorId: userId, action: "DIRECTOR_LINK_CANCELLED", entityType: "Director", entityId: mine.id });
+  return getMyDirectoryLink(userId);
+}
+
+/** Administration : valider la demande, ou la refuser / retirer un rattachement (la fiche redevient libre). */
+export async function decideDirectoryLink(actorId: string, directorId: string, decision: "valider" | "refuser"): Promise<DirectorAdmin> {
+  const director = await prisma.director.findUnique({ where: { id: directorId }, select: { userId: true, linkStatus: true } });
+  if (!director) throw new DirectorError("Directeur introuvable.", 404);
+  if (!director.userId) throw new DirectorError("Aucun compte directeur n'est rattaché à cette fiche.", 409);
+  const data = decision === "valider" ? { linkStatus: "valide" } : { userId: null, linkStatus: null, linkRequestedAt: null };
+  const row = await prisma.director.update({ where: { id: directorId }, data, include: ADMIN_INCLUDE });
+  await logAudit({
+    actorId,
+    action: decision === "valider" ? "DIRECTOR_LINK_VALIDATED" : "DIRECTOR_LINK_REMOVED",
+    entityType: "Director",
+    entityId: directorId,
+    metadata: { account: director.userId },
+  });
+  return toAdmin(row, await accountsWithActiveCanevas([validatedAccount(row)]));
 }

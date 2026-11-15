@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Plus, Trash2, ClipboardList, CheckCircle2 } from "lucide-react";
 import { useSupervision } from "@/contexts/SupervisionContext";
 import ResearchPrimaryButton from "@/components/research/ResearchWizard/brand/ResearchPrimaryButton";
+import DirectoryLinkCard from "@/components/directors/DirectoryLinkCard";
 import type { SupervisionCanevas, WorkType } from "@/lib/core/supervision/SupervisionTypes";
 
 const DEFAULT_STEPS = [
@@ -92,9 +93,12 @@ export default function SupervisorCanevasPage() {
         <h1 className="mt-1 text-2xl font-bold text-acadia-navy">Votre cadre de supervision</h1>
         <p className="mt-2 text-sm text-slate-500">
           Ce canevas décrit les étapes que vous attendez de vos étudiants pour une année académique donnée. Il
-          vient au-dessus du moteur scientifique d&apos;ACADIA — il ne le remplace jamais.
+          vient au-dessus du moteur scientifique d&apos;ACADIA — il ne le remplace jamais. Le canevas actif s&apos;applique
+          automatiquement aux étudiants qui vous ont choisi, dès que votre compte est rattaché à votre nom.
         </p>
       </div>
+
+      <DirectoryLinkCard compact />
 
       <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="grid gap-4 sm:grid-cols-2">

@@ -263,7 +263,11 @@ export type AuditAction =
   // Annuaire des directeurs de mémoire (lib/server/directors/DirectorsService.ts)
   | "DIRECTOR_CREATED"
   | "DIRECTOR_UPDATED"
-  | "DIRECTORS_IMPORTED";
+  | "DIRECTORS_IMPORTED"
+  | "DIRECTOR_LINK_REQUESTED"
+  | "DIRECTOR_LINK_CANCELLED"
+  | "DIRECTOR_LINK_VALIDATED"
+  | "DIRECTOR_LINK_REMOVED";
 
 export async function logAudit(input: {
   actorId?: string;

@@ -51,6 +51,8 @@ model User {
   // nécessairement un superviseur de mémoire, même s'il peut arriver
   // qu'une même personne cumule les deux rôles via deux profils distincts.
   teacherProfile    TeacherProfile?
+  // Fiche de l'annuaire des directeurs rattachée à ce compte directeur (voir Director.userId).
+  directoryEntry    Director?            @relation("DirectorAccount")
   resetTokens       PasswordResetToken[]
   researchProjects  ResearchProject[]    @relation("ResearchOwner")
   journeySessions   JourneySession[]     @relation("JourneySessionOwner")
@@ -198,10 +200,18 @@ model Director {
   notes         String? // interne à l'administration : ce que l'on sait de sa façon de travailler
   logicStatus   String   @default("a_recueillir") // a_recueillir | en_cours | integre (lib/core/directors/directors.ts)
   isActive      Boolean  @default(true)
+  // Compte directeur (rôle supervisor) rattaché à cette fiche : le directeur en fait la
+  // demande depuis son compte, l'administration la valide. Une fois validé, le canevas
+  // ACTIF de ce compte (SupervisionCanevas) s'applique automatiquement aux étudiants qui
+  // ont choisi ce directeur. Sans rattachement validé : logique générale d'ACADIA.
+  userId          String?   @unique
+  linkStatus      String? // demande | valide (null = aucun rattachement)
+  linkRequestedAt DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   projects ResearchProject[]
+  account  User?             @relation("DirectorAccount", fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([institution])
   @@index([isActive])

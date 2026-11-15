@@ -7,6 +7,7 @@ import { buttonClass, inputClass, Metric, Notice, Pill, Section, type Tone } fro
 import {
   DIRECTOR_LINE_FORMAT,
   DIRECTOR_LOGIC_STATUSES,
+  LINK_STATUS_LABELS,
   LOGIC_STATUS_LABELS,
   directorLabel,
   type DirectorAdmin,
@@ -137,8 +138,31 @@ export default function DirectorsAdmin() {
     }
   }
 
+  async function decideLink(director: DirectorAdmin, decision: "valider" | "refuser") {
+    const who = director.account ? `${director.account.accountName} (${director.account.accountEmail})` : "ce compte";
+    const question =
+      decision === "valider"
+        ? `Valider : ${who} est bien ${directorLabel(director)} ? Son canevas s'appliquera automatiquement à ses étudiants.`
+        : `Retirer le rattachement de ${who} à ${directorLabel(director)} ? Ses étudiants reviendront à la logique générale d'ACADIA.`;
+    if (!window.confirm(question)) return;
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/directors/${encodeURIComponent(director.id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ link: decision }) });
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setError(errorText(res.status, body));
+        return;
+      }
+      setMessage(decision === "valider" ? `Rattachement validé : ${directorLabel(director)}.` : `Rattachement retiré : ${directorLabel(director)}.`);
+      await load();
+    } catch {
+      setError("Connexion au serveur impossible.");
+    }
+  }
+
   const directors = data?.directors ?? [];
   const active = directors.filter((d) => d.isActive);
+  const pendingLinks = directors.filter((d) => d.account?.status === "demande");
   const set = (key: keyof Draft) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setDraft((d) => ({ ...d, [key]: e.target.value }));
 
   return (
@@ -147,19 +171,27 @@ export default function DirectorsAdmin() {
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-700">Administration</p>
         <h1 className="mt-1 text-2xl font-extrabold text-slate-900">Directeurs de mémoire</h1>
         <p className="mt-1 max-w-3xl text-sm text-slate-600">
-          Les étudiants choisissent leur directeur dans cette liste quand ils créent leur travail. Tant que le canevas d&apos;un directeur
-          n&apos;est pas intégré, ACADIA applique sa logique générale. Les notes ne sont visibles que par l&apos;administration.
+          Les étudiants choisissent leur directeur dans cette liste quand ils créent leur travail. Un directeur qui a un compte peut
+          demander à y être rattaché ; une fois la demande validée ici, son canevas actif s&apos;applique automatiquement à ses étudiants.
+          Sinon, ACADIA applique sa logique générale. Les notes ne sont visibles que par l&apos;administration.
         </p>
       </header>
 
       {error ? <Notice tone="error">{error}</Notice> : null}
       {message ? <Notice tone="success">{message}</Notice> : null}
+      {pendingLinks.length > 0 ? (
+        <Notice tone="warning" title={`${pendingLinks.length} rattachement(s) de compte directeur à valider`}>
+          Vérifiez que la personne est bien le directeur avant de valider : son canevas s&apos;appliquera à tous les étudiants qui l&apos;ont choisi.
+          Les demandes apparaissent dans la colonne « Compte directeur ».
+        </Notice>
+      ) : null}
 
       {data ? (
-        <div className="grid gap-3 sm:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-5">
           <Metric label="Directeurs actifs" value={active.length} />
           <Metric label="Projets rattachés" value={directors.reduce((sum, d) => sum + d.projects, 0)} />
           <Metric label="Canevas intégrés" value={directors.filter((d) => d.logicStatus === "integre").length} />
+          <Metric label="Rattachements à valider" value={pendingLinks.length} tone={pendingLinks.length ? "warn" : undefined} />
           <Metric label="Noms saisis hors liste" value={data.unlisted.length} tone={data.unlisted.length ? "warn" : undefined} />
         </div>
       ) : null}
@@ -176,7 +208,7 @@ export default function DirectorsAdmin() {
             <table className="min-w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
                 <tr>
-                  {["Directeur", "Université / faculté", "Spécialités", "Projets", "Canevas", ""].map((h) => (
+                  {["Directeur", "Université / faculté", "Spécialités", "Projets", "Canevas", "Compte directeur", ""].map((h) => (
                     <th key={h || "actions"} scope="col" className="whitespace-nowrap px-3 py-2 font-semibold">
                       {h}
                     </th>
@@ -196,6 +228,34 @@ export default function DirectorsAdmin() {
                     <td className="px-3 py-2 tabular-nums text-slate-700">{d.projects}</td>
                     <td className="px-3 py-2">
                       <Pill tone={STATUS_TONE[d.logicStatus]}>{LOGIC_STATUS_LABELS[d.logicStatus]}</Pill>
+                      {d.hasCanevas ? <span className="mt-1 block text-xs text-emerald-700">défini par le directeur</span> : null}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-slate-700">
+                      {d.account ? (
+                        <>
+                          <span className="block font-semibold text-slate-900">{d.account.accountName}</span>
+                          <span className="block text-slate-500">{d.account.accountEmail}</span>
+                          {d.account.status === "demande" ? (
+                            <span className="mt-1.5 flex flex-wrap gap-1">
+                              <button type="button" className="rounded-lg bg-emerald-600 px-2.5 py-1 font-semibold text-white hover:bg-emerald-700" onClick={() => void decideLink(d, "valider")}>
+                                Valider
+                              </button>
+                              <button type="button" className="rounded-lg border border-slate-200 px-2.5 py-1 font-semibold text-slate-600 hover:bg-slate-50" onClick={() => void decideLink(d, "refuser")}>
+                                Refuser
+                              </button>
+                            </span>
+                          ) : (
+                            <span className="mt-1 flex items-center gap-2">
+                              <Pill tone="green">{LINK_STATUS_LABELS.valide}</Pill>
+                              <button type="button" className="text-slate-400 hover:text-rose-700" onClick={() => void decideLink(d, "refuser")}>
+                                Retirer
+                              </button>
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-right">
                       <button

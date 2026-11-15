@@ -153,9 +153,11 @@ export default function DirectorPicker({
               <p className="text-xs text-slate-500">{[selected.institution, selected.faculty, selected.department].filter(Boolean).join(" · ")}</p>
             )}
             <p className="mt-2">
-              {selected.logicStatus === "integre"
-                ? "Son canevas est intégré : ACADIA ajuste votre travail à sa façon de travailler."
-                : `Son canevas n'est pas encore intégré : ACADIA applique pour l'instant sa logique générale. Votre travail s'ajustera dès que le canevas de ${directorLabel(selected)} sera intégré.`}
+              {selected.hasCanevas
+                ? `${directorLabel(selected)} a défini son canevas dans ACADIA : il s'appliquera à votre travail, et chacune de ses mises à jour aussi.`
+                : selected.logicStatus === "integre"
+                  ? "Son canevas est intégré : ACADIA ajuste votre travail à sa façon de travailler."
+                  : `${directorLabel(selected)} n'a pas encore défini son canevas dans ACADIA : votre travail suit la logique générale d'ACADIA, et s'ajustera dès que son canevas sera disponible.`}
             </p>
           </div>
         </div>

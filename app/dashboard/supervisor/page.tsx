@@ -7,6 +7,7 @@ import { GraduationCap, UserPlus, ClipboardList, Copy, Check, Search } from "luc
 import { useAuth } from "@/contexts/AuthContext";
 import { useSupervision } from "@/contexts/SupervisionContext";
 import GuidanceVideo from "@/components/shared/GuidanceVideo";
+import DirectoryLinkCard from "@/components/directors/DirectoryLinkCard";
 
 interface StudentRow {
   assignmentId: string;
@@ -103,6 +104,9 @@ export default function SupervisorDashboardPage() {
           scientifique reste toujours la vôtre.
         </p>
       </div>
+
+      {/* Rattachement à sa fiche dans la liste des directeurs : son canevas s'applique alors automatiquement. */}
+      <DirectoryLinkCard />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="À examiner" value={toReviewCount} color="bg-blue-50 text-blue-700" />
