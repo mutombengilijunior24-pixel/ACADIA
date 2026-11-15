@@ -49,18 +49,18 @@ export default function CTA() {
         <div className="relative z-10 mx-auto max-w-5xl text-center">
 
           <span className="rounded-full bg-white/10 px-6 py-2 text-sm font-semibold text-blue-100 backdrop-blur">
-            Votre prochain mémoire commence ici
+            Sciences économiques et de gestion
           </span>
 
           <h2 className="mt-10 text-5xl font-black leading-tight text-white lg:text-7xl">
-            Chaque grand mémoire
+            Vos données méritent
             <br />
-            commence par une simple idée.
+            une vraie interprétation.
           </h2>
 
           <p className="mx-auto mt-10 max-w-3xl text-xl leading-9 text-blue-100">
-            Aujourd&apos;hui, transformez cette idée en une recherche
-            scientifique structurée, rigoureuse et prête à être soutenue.
+            Récoltez vos données d&apos;enquête, puis interprétez-les
+            avec rigueur, selon votre spécialité et le canevas de votre directeur.
           </p>
 
           <CTAButtons />

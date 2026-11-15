@@ -9,9 +9,9 @@ import Reveal from "./Reveal";
 
 const AUDIENCES = [
   { icon: GraduationCap, title: "Licence", description: "Travail de fin de cycle (TFC) en économie ou gestion." },
-  { icon: Award, title: "Master", description: "Mémoire structuré, de la problématique à l'économétrie." },
-  { icon: Microscope, title: "Doctorat / chercheur", description: "Production scientifique rigoureuse, formulations prudentes." },
-  { icon: Users2, title: "Encadreur", description: "Suivi de la cohérence méthodologique du travail encadré." },
+  { icon: Award, title: "Master", description: "Récolte des données d'enquête et interprétation, jusqu'à l'économétrie." },
+  { icon: Microscope, title: "Doctorat / chercheur", description: "Analyses rigoureuses, interprétations aux formulations prudentes." },
+  { icon: Users2, title: "Directeur de mémoire", description: "Votre canevas s'applique automatiquement aux étudiants que vous encadrez." },
 ];
 
 const SEG_FIELDS = ["Économie", "Gestion", "Finance", "Marketing", "Ressources humaines", "Entrepreneuriat", "Comptabilité"];

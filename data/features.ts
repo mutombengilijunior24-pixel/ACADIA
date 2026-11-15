@@ -1,34 +1,20 @@
-// P13 — cette liste décrit UNIQUEMENT des capacités réellement
-// construites (P1-P12). Avant P13, plusieurs entrées décrivaient
-// des fonctionnalités inexistantes (export Excel, bibliographie
-// APA/MLA/Chicago, préparation à la soutenance avec questions du
-// jury, ANOVA) — jamais une fonctionnalité annoncée qui n'existe
-// pas dans le produit.
+// Cette liste décrit UNIQUEMENT des capacités réellement construites —
+// jamais une fonctionnalité annoncée qui n'existe pas dans le produit.
+// Recentrage du 2026-11-14 : ACADIA se limite à la récolte et à
+// l'interprétation des données (plus d'analyse de sujet ni de
+// production scientifique annoncées ici).
 
 export const features = [
   {
-    icon: "brain",
-    title: "Compréhension du sujet",
-    description:
-      "Analyse votre sujet et propose variables, objectifs, hypothèses et problématique — toujours à valider par vous.",
-    color: "bg-blue-100 text-blue-600",
-    benefits: [
-      "Analyse du sujet de recherche",
-      "Variables et hypothèses proposées",
-      "Objectifs et problématique structurés",
-    ],
-  },
-
-  {
     icon: "clipboard",
-    title: "Instrument de collecte",
+    title: "Questionnaire d'enquête",
     description:
-      "Génère un questionnaire ou un guide d'entretien adapté à vos variables, entièrement modifiable avant diffusion.",
+      "Créez votre questionnaire avec ACADIA, ou importez celui que vous avez déjà rédigé (Word, PDF, texte), puis diffusez-le par un simple lien.",
     color: "bg-violet-100 text-violet-600",
     benefits: [
-      "Questions reliées à vos variables",
-      "Guide d'entretien pour le qualitatif",
-      "Édition complète avant publication",
+      "Création guidée ou import d'un questionnaire existant",
+      "Lien de diffusion à partager avec vos répondants",
+      "Réponses centralisées, prêtes à analyser",
     ],
   },
 
@@ -36,23 +22,23 @@ export const features = [
     icon: "chart",
     title: "Analyse statistique",
     description:
-      "Statistiques descriptives, analyses bivariées (khi², corrélations) et modèle économétrique (régression MCO) — calculés de façon déterministe.",
+      "Statistiques descriptives, tests bivariés (khi², corrélations), économétrie et analyse financière, selon votre spécialité — calculés de façon déterministe.",
     color: "bg-green-100 text-green-600",
     benefits: [
       "Statistiques descriptives complètes",
       "Tests bivariés avec seuils de signification",
-      "Régression MCO avec diagnostics",
+      "Économétrie et ratios financiers",
     ],
   },
 
   {
     icon: "book",
-    title: "Interprétation & discussion",
+    title: "Interprétation des résultats",
     description:
       "Une interprétation prudente de vos résultats, confrontée à vos hypothèses — jamais une causalité affirmée à partir d'une simple association.",
     color: "bg-orange-100 text-orange-600",
     benefits: [
-      "Lecture économique des coefficients",
+      "Lecture économique des résultats",
       "Confrontation aux hypothèses",
       "Limites et précautions explicites",
     ],
@@ -60,25 +46,13 @@ export const features = [
 
   {
     icon: "export",
-    title: "Export professionnel",
-    description: "Exportez votre travail scientifique en DOCX ou PDF, avec page de garde, table des matières et bibliographie.",
+    title: "Export Word",
+    description: "Exportez vos résultats, tableaux et interprétations dans un document Word que vous pouvez modifier librement.",
     color: "bg-pink-100 text-pink-600",
     benefits: [
-      "Export DOCX éditable",
-      "Export PDF paginé",
+      "Document Word éditable",
+      "Tableaux et graphiques inclus",
       "Mise en page académique modifiable",
-    ],
-  },
-
-  {
-    icon: "graduation",
-    title: "Production scientifique",
-    description: "Une structure de travail scientifique complète (IRMRD), avec un contrôle de préparation avant révision par votre encadreur.",
-    color: "bg-cyan-100 text-cyan-600",
-    benefits: [
-      "Structure Introduction–Méthodologie–Résultats–Discussion",
-      "Contrôle de préparation du document",
-      "Édition humaine à chaque section",
     ],
   },
 ];

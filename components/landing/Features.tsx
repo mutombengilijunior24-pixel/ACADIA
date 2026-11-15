@@ -40,15 +40,14 @@ export default function Features() {
           </span>
 
           <h2 className="mt-6 text-5xl font-black leading-tight text-acadia-navy">
-            Une plateforme.
+            De la récolte
             <br />
-            Tous les outils de la recherche.
+            à l&apos;interprétation.
           </h2>
 
           <p className="mt-6 text-xl leading-9 text-slate-600">
-            ACADIA réunit la compréhension du sujet,
-            les questionnaires, l&apos;analyse statistique,
-            l&apos;interprétation et la production scientifique
+            ACADIA réunit le questionnaire d&apos;enquête, l&apos;analyse
+            statistique et l&apos;interprétation de vos résultats
             dans une seule plateforme.
           </p>
 
@@ -56,7 +55,7 @@ export default function Features() {
 
         {/* Cards */}
 
-        <div className="mt-20 grid gap-8 md:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-20 grid gap-8 md:grid-cols-2">
 
           {features.map((feature, index) => {
 

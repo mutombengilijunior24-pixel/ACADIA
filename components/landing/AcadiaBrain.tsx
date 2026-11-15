@@ -12,8 +12,8 @@ import Reveal from "./Reveal";
 const PILLARS = [
   {
     icon: FlaskConical,
-    title: "Intelligence méthodologique",
-    description: "Cohérence entre question de recherche, objectifs, variables et hypothèses — vérifiée à chaque étape.",
+    title: "Intelligence de collecte",
+    description: "Des questions reliées à vos objectifs et à vos hypothèses, pour récolter des données réellement exploitables.",
   },
   {
     icon: Calculator,
