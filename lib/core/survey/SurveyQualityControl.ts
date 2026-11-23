@@ -41,7 +41,7 @@ export interface QualityControlResult<T> {
  * Ne corrige jamais silencieusement les modalités — une échelle
  * incohérente est retirée, jamais réécrite sans contrôle humain.
  */
-function isCoherentScale(options: { label: string }[]): boolean {
+export function isCoherentScale(options: { label: string }[]): boolean {
   if (options.length < 4 || options.length > 7) return false;
   const labels = options.map((o) => o.label.toLowerCase());
   if (labels.some((l) => DURATION_KEYWORDS.some((k) => l.includes(k)))) return false;

@@ -3,11 +3,13 @@
 // ============================================================
 // ACADIA SURVEY — Nouvelle enquête
 //
-// Deux chemins : "Travailler avec ACADIA" (formulaire guidé, génère un
-// questionnaire structuré via le moteur méthodologique IA — voir
-// lib/core/survey/SurveyGenerationEngine.ts et
-// lib/ai/openai/SurveyQuestionnaireAI.ts) et "Importer un
-// questionnaire" (extraction + restructuration d'un document DOCX).
+// Trois chemins : "Coller mon questionnaire" (reconnaissance SANS IA du
+// texte collé, dans le navigateur — lib/core/survey/PastedQuestionnaire.ts ;
+// fonctionne même sans crédit OpenAI), "Travailler avec ACADIA" (formulaire
+// guidé, génère un questionnaire structuré via le moteur méthodologique IA —
+// voir lib/core/survey/SurveyGenerationEngine.ts et
+// lib/ai/openai/SurveyQuestionnaireAI.ts) et "Importer un fichier Word"
+// (extraction + reconnaissance IA d'un document DOCX).
 // La génération peut échouer (OpenAI indisponible, réponse invalide) :
 // jamais de bouton figé — erreur claire + bouton "Réessayer" toujours
 // disponibles.
@@ -16,10 +18,40 @@
 import { Suspense, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, Sparkles, FileUp, X, Plus, Loader2, Wand2, Check } from "lucide-react";
+import { ArrowLeft, ArrowRight, Sparkles, FileUp, X, Plus, Loader2, Wand2, Check, ClipboardPaste, AlertTriangle } from "lucide-react";
 import type { ExtractedQuestion, ExtractedQuestionnaire, ExtractedQuestionType } from "@/lib/ai/openai/SurveyDocumentAI";
+import { MAX_PASTED_LENGTH, parsePastedQuestionnaire, type PastedQuestionnaire } from "@/lib/core/survey/PastedQuestionnaire";
+import { controlQuestionnaireQuality } from "@/lib/core/survey/SurveyQualityControl";
 
-type Mode = "choice" | "guided" | "import";
+type Mode = "choice" | "guided" | "import" | "paste";
+
+// Exemple proposé par « Voir un exemple » sur l'écran « Coller mon questionnaire ».
+const PASTE_EXAMPLE = `Impact du crédit bancaire sur la croissance des PME à Lubumbashi
+
+Bonjour, dans le cadre de notre mémoire, nous vous prions de répondre à ce questionnaire. Vos réponses resteront anonymes.
+
+Section 1 : Identification du répondant
+1. Sexe :
+☐ Masculin ☐ Féminin
+2. Âge :
+3. Secteur d'activité de votre entreprise :
+- Commerce
+- Services
+- Industrie
+
+Section 2 : Accès au crédit
+4. Avez-vous déjà bénéficié d'un crédit bancaire ? (Oui / Non)
+5. Quelles difficultés avez-vous rencontrées ? (plusieurs réponses possibles)
+☐ Taux d'intérêt élevés
+☐ Garanties exigées
+☐ Lenteur administrative
+
+Section 3 : Perception (1 = Pas du tout d'accord, 2 = Pas d'accord, 3 = Neutre, 4 = D'accord, 5 = Tout à fait d'accord)
+6. Le crédit a amélioré mon chiffre d'affaires.
+7. Le crédit m'a permis d'embaucher du personnel.
+
+8. Quelles suggestions faites-vous aux banques ?
+…………………………………`;
 
 const TOTAL_STEPS = 5;
 
@@ -58,7 +90,8 @@ const PROCESSING_STEPS = [
 function NewSurveyForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialMode = searchParams.get("mode") === "import" ? "import" : searchParams.get("mode") === "guided" ? "guided" : "choice";
+  const modeParam = searchParams.get("mode");
+  const initialMode = modeParam === "import" || modeParam === "guided" || modeParam === "paste" ? modeParam : "choice";
 
   const [mode, setMode] = useState<Mode>(initialMode as Mode);
   const [step, setStep] = useState(0);
@@ -89,6 +122,22 @@ function NewSurveyForm() {
   const [restructurePairs, setRestructurePairs] = useState<RestructurePair[] | null>(null);
   const [acceptedProposals, setAcceptedProposals] = useState<Record<number, boolean>>({});
   const [creatingImport, setCreatingImport] = useState(false);
+
+  // Coller mon questionnaire : reconnaissance sans IA, dans le navigateur (lib/core/survey/PastedQuestionnaire.ts).
+  const [pasteText, setPasteText] = useState("");
+  const [pasteResult, setPasteResult] = useState<PastedQuestionnaire | null>(null);
+  const [importDescription, setImportDescription] = useState("");
+
+  function recognizePasted() {
+    const result = parsePastedQuestionnaire(pasteText, title);
+    setPasteResult(result);
+    setImportTitle(result.title);
+    setImportDescription(result.description);
+    setImportQuestions(result.questions);
+    setRestructurePairs(null);
+    setAcceptedProposals({});
+    setImportError(null);
+  }
 
   function addCategory() {
     const v = newCategory.trim();
@@ -163,7 +212,9 @@ function NewSurveyForm() {
       const res = await fetch("/api/survey", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imported: { title: importTitle, questions: finalImportQuestions() } }),
+        body: JSON.stringify({
+          imported: { title: importTitle, description: mode === "paste" && importDescription.trim() ? importDescription.trim() : undefined, questions: finalImportQuestions() },
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -226,15 +277,32 @@ function NewSurveyForm() {
             <ArrowLeft className="h-3.5 w-3.5" /> Retour
           </Link>
           <h1 className="mt-4 text-2xl font-bold text-acadia-navy sm:text-3xl">Nouvelle enquête</h1>
-          <div className="mt-8 grid gap-4 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setMode("paste")}
+            className="mt-8 flex w-full items-start gap-4 rounded-3xl border-2 border-acadia-blue bg-acadia-blue-50/40 p-6 text-left transition hover:bg-acadia-blue-50"
+          >
+            <ClipboardPaste className="h-6 w-6 shrink-0 text-acadia-blue" />
+            <span>
+              <span className="flex flex-wrap items-center gap-2 font-bold text-acadia-navy">
+                Coller mon questionnaire
+                <span className="rounded-full bg-acadia-blue px-2.5 py-0.5 text-2xs font-semibold text-white">Le plus simple</span>
+              </span>
+              <span className="mt-1 block text-sm text-slate-600">
+                Copiez votre questionnaire depuis ChatGPT, Word, un PDF ou WhatsApp, et collez-le : ACADIA reconnaît aussitôt les questions et les
+                réponses. Vous vérifiez, puis vous obtenez le lien à diffuser.
+              </span>
+            </span>
+          </button>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <button
               type="button"
               onClick={() => setMode("import")}
               className="rounded-3xl border border-slate-200 bg-white p-6 text-left transition hover:border-acadia-blue hover:bg-acadia-blue-50/40"
             >
               <FileUp className="h-6 w-6 text-acadia-blue" />
-              <p className="mt-4 font-bold text-acadia-navy">Importer un questionnaire</p>
-              <p className="mt-1 text-sm text-slate-500">À partir d&apos;un document existant (Word).</p>
+              <p className="mt-4 font-bold text-acadia-navy">Importer un fichier Word</p>
+              <p className="mt-1 text-sm text-slate-500">À partir d&apos;un document existant (.docx).</p>
             </button>
             <button
               type="button"
@@ -246,6 +314,166 @@ function NewSurveyForm() {
               <p className="mt-1 text-sm text-slate-500">ACADIA vous accompagne pour structurer votre enquête.</p>
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === "paste") {
+    const quality = importQuestions ? controlQuestionnaireQuality(importQuestions) : null;
+    const sections = importQuestions
+      ? importQuestions.reduce<{ name: string; items: { q: ExtractedQuestion; n: number }[] }[]>((acc, q, i) => {
+          const last = acc[acc.length - 1];
+          if (last && last.name === q.section) last.items.push({ q, n: i + 1 });
+          else acc.push({ name: q.section, items: [{ q, n: i + 1 }] });
+          return acc;
+        }, [])
+      : [];
+
+    return (
+      <div className="p-4 sm:p-6 lg:p-8">
+        <div className="mx-auto max-w-3xl">
+          <button
+            type="button"
+            onClick={() => (pasteResult ? setPasteResult(null) : setMode("choice"))}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-acadia-blue"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" /> {pasteResult ? "Modifier le texte collé" : "Retour"}
+          </button>
+          <h1 className="mt-4 text-2xl font-bold text-acadia-navy sm:text-3xl">Coller mon questionnaire</h1>
+
+          {!pasteResult ? (
+            <div className="mt-6 space-y-4">
+              <p className="text-sm leading-relaxed text-slate-600">
+                Copiez votre questionnaire (ChatGPT, Word, PDF, WhatsApp…) et collez-le ci-dessous. ACADIA reconnaît les sections, les questions
+                numérotées, les réponses proposées (puces, cases ☐, a) b) c)…), les questions Oui / Non et les échelles (« 1 = Pas du tout d&apos;accord …
+                5 = Tout à fait d&apos;accord »). Rien n&apos;est envoyé à une intelligence artificielle : le résultat est immédiat, et vous le vérifiez
+                avant de créer l&apos;enquête.
+              </p>
+              <textarea
+                value={pasteText}
+                onChange={(e) => setPasteText(e.target.value.slice(0, MAX_PASTED_LENGTH))}
+                rows={18}
+                aria-label="Texte du questionnaire"
+                placeholder={"Titre du questionnaire\n\nSection 1 : Identification\n1. Sexe :\n☐ Masculin ☐ Féminin\n2. Âge :\n…"}
+                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 font-mono text-sm leading-relaxed text-slate-800 focus:border-acadia-blue focus:outline-none focus:ring-2 focus:ring-acadia-blue/15"
+              />
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <button type="button" onClick={() => setPasteText(PASTE_EXAMPLE)} className="text-sm font-semibold text-slate-500 underline hover:text-acadia-blue">
+                  Voir un exemple
+                </button>
+                <button
+                  type="button"
+                  disabled={!pasteText.trim()}
+                  onClick={recognizePasted}
+                  className="inline-flex items-center gap-2 rounded-xl bg-acadia-blue px-6 py-3 text-sm font-semibold text-white hover:bg-acadia-blue-dark disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Wand2 className="h-4 w-4" /> Reconnaître les questions
+                </button>
+              </div>
+            </div>
+          ) : importQuestions && importQuestions.length === 0 ? (
+            <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+              <p className="font-semibold">Aucune question reconnue dans ce texte.</p>
+              <p className="mt-1">
+                Numérotez vos questions (« 1. », « 2. »…) ou terminez-les par un point d&apos;interrogation, puis réessayez. « Voir un exemple » montre
+                une présentation qui fonctionne.
+              </p>
+              <button type="button" onClick={() => setPasteResult(null)} className="mt-3 font-semibold text-acadia-blue underline">
+                Modifier le texte collé
+              </button>
+            </div>
+          ) : (
+            <div className="mt-6 space-y-6">
+              <div className="rounded-2xl bg-acadia-blue-50 px-4 py-3 text-sm font-semibold text-acadia-blue">
+                ACADIA a reconnu {importQuestions?.length ?? 0} question{(importQuestions?.length ?? 0) > 1 ? "s" : ""}
+                {sections.length > 1 ? ` réparties en ${sections.length} sections` : ""}. Vérifiez-les ; vous pourrez encore tout modifier après la
+                création.
+              </div>
+
+              {quality && quality.warnings.length > 0 && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                  <p className="flex items-center gap-2 font-semibold">
+                    <AlertTriangle className="h-4 w-4" /> À vérifier avant de créer l&apos;enquête
+                  </p>
+                  <ul className="mt-2 list-disc space-y-1 pl-5">
+                    {quality.warnings.map((w) => (
+                      <li key={w}>{w}</li>
+                    ))}
+                  </ul>
+                  {quality.questions.length < (importQuestions?.length ?? 0) && (
+                    <p className="mt-2 text-xs">
+                      Les questions signalées comme « ignorées » ne seront pas reprises : modifiez le texte collé pour les conserver.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {pasteResult.ignored.length > 0 && (
+                <details className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+                  <summary className="cursor-pointer font-semibold text-slate-700">
+                    {pasteResult.ignored.length} ligne{pasteResult.ignored.length > 1 ? "s" : ""} non rattachée{pasteResult.ignored.length > 1 ? "s" : ""} à une
+                    question
+                  </summary>
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
+                    {pasteResult.ignored.map((l, i) => (
+                      <li key={`${i}-${l}`}>{l}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+
+              <label className="block text-sm font-semibold text-slate-600">
+                Titre de l&apos;enquête
+                <input value={importTitle} onChange={(e) => setImportTitle(e.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-acadia-blue focus:outline-none" />
+              </label>
+              <label className="block text-sm font-semibold text-slate-600">
+                Introduction présentée aux répondants <span className="font-normal text-slate-400">(facultatif)</span>
+                <textarea value={importDescription} onChange={(e) => setImportDescription(e.target.value)} rows={3} className="mt-1.5 w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-normal focus:border-acadia-blue focus:outline-none" />
+              </label>
+
+              <div className="space-y-5">
+                {sections.map((s, si) => (
+                  <div key={`${si}-${s.name}`} className="space-y-2">
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{s.name}</p>
+                    {s.items.map(({ q, n }) => (
+                      <div key={n} className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <p className="text-sm font-semibold text-acadia-navy">
+                          <span className="mr-1.5 text-slate-400">{n}.</span>
+                          {q.text}
+                        </p>
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-2xs text-slate-600">
+                          <span className="rounded-full bg-acadia-blue-50 px-2.5 py-1 font-semibold text-acadia-blue">{TYPE_LABELS[q.type]}</span>
+                          {q.options.map((o, oi) => (
+                            <span key={`${oi}-${o.label}`} className="rounded-full bg-slate-100 px-2.5 py-1">
+                              {o.label}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+
+              {importError && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-600">{importError}</p>}
+
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <button type="button" onClick={() => setPasteResult(null)} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                  Modifier le texte collé
+                </button>
+                <button
+                  type="button"
+                  disabled={creatingImport || !importTitle.trim()}
+                  onClick={handleCreateFromImport}
+                  className="inline-flex items-center gap-2 rounded-xl bg-acadia-blue px-6 py-3 text-sm font-semibold text-white hover:bg-acadia-blue-dark disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {creatingImport ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                  {creatingImport ? "Création en cours..." : "Créer l'enquête"}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -313,9 +541,21 @@ function NewSurveyForm() {
               {importError && (
                 <div className="mt-5 flex flex-col items-center gap-2 rounded-xl bg-red-50 px-4 py-3">
                   <p className="text-xs font-semibold text-red-600">{importError}</p>
-                  <button type="button" onClick={() => setImportError(null)} className="text-xs font-semibold text-red-600 underline">
-                    Réessayer
-                  </button>
+                  <div className="flex flex-wrap justify-center gap-3">
+                    <button type="button" onClick={() => setImportError(null)} className="text-xs font-semibold text-red-600 underline">
+                      Réessayer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setImportError(null);
+                        setMode("paste");
+                      }}
+                      className="text-xs font-semibold text-acadia-blue underline"
+                    >
+                      Coller le texte du questionnaire à la place
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
